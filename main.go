@@ -1,0 +1,6 @@
+package eqRaidBot
+
+func main() {
+
+	
+}
