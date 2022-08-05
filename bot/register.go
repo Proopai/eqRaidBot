@@ -3,9 +3,10 @@ package bot
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
 	"log"
 	"strconv"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 const (
@@ -34,30 +35,6 @@ type registrationState struct {
 
 func (r *registrationState) isComplete() bool {
 	return r.state == regStateSaved && r.Name != "" && r.Class != 0 && r.Level != 0
-}
-
-func (r *RegistrationProvider) registrationWorkflow(userId string) *registrationState {
-	if v, ok := r.registry[userId]; ok {
-		return &v
-	} else {
-		return nil
-	}
-}
-
-func (r *RegistrationProvider) init(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) bool {
-	// check the database to see if they have previously registered
-	if _, ok := r.registry[m.Author.ID]; !ok {
-		r.registry[m.Author.ID] = registrationState{
-			state:  regStateName,
-			userId: m.Author.ID,
-		}
-		if err := sendMessage(s, c, fmt.Sprintf("Hello %s, what is your characters name?", m.Author.Username)); err != nil {
-			return false
-		}
-		return true
-	}
-
-	return false
 }
 
 func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -134,6 +111,30 @@ func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discord
 
 	}
 
+}
+
+func (r *RegistrationProvider) registrationWorkflow(userId string) *registrationState {
+	if v, ok := r.registry[userId]; ok {
+		return &v
+	} else {
+		return nil
+	}
+}
+
+func (r *RegistrationProvider) init(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) bool {
+	// check the database to see if they have previously registered
+	if _, ok := r.registry[m.Author.ID]; !ok {
+		r.registry[m.Author.ID] = registrationState{
+			state:  regStateName,
+			userId: m.Author.ID,
+		}
+		if err := sendMessage(s, c, fmt.Sprintf("Hello %s, what is your characters name?", m.Author.Username)); err != nil {
+			return false
+		}
+		return true
+	}
+
+	return false
 }
 
 func (r *RegistrationProvider) reset(m *discordgo.MessageCreate) {
