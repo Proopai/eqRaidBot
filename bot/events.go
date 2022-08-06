@@ -31,8 +31,12 @@ type eventState struct {
 	state       int64
 }
 
+func (r *eventState) isComplete() bool {
+	return r.state == eventStateSaved
+}
+
 func NewEventProvider() *EventProvider {
-	return &EventProvider{}
+	return &EventProvider{registry: make(map[string]eventState)}
 }
 
 var eventListText = `All scheduled events are listed below.
@@ -45,6 +49,14 @@ func (r *EventProvider) listEvents(s *discordgo.Session, m *discordgo.MessageCre
 	_, err := s.ChannelMessageSend(m.ChannelID, eventListText)
 	if err != nil {
 		log.Println(err.Error())
+	}
+}
+
+func (r *EventProvider) eventWorkflow(userId string) *eventState {
+	if v, ok := r.registry[userId]; ok {
+		return &v
+	} else {
+		return nil
 	}
 }
 
@@ -69,7 +81,7 @@ func (r *EventProvider) createEventStep(s *discordgo.Session, m *discordgo.Messa
 		}
 	case eventStateDesc:
 		msg := `Enter a time for the event.  
-		**Time must be in the following format: 01/21/2022 07:00PM PST**`
+Time must be in the following format: **01/21/2022 07:00PM PST**`
 		r.descriptionAck(m)
 		if err := sendMessage(s, c, msg); err != nil {
 			log.Print(err.Error())
@@ -83,8 +95,8 @@ func (r *EventProvider) createEventStep(s *discordgo.Session, m *discordgo.Messa
 		}
 
 		msg := `Does the event repeat?. (1 or 2) 
-		1. Yes
-		2. No`
+1. Yes
+2. No`
 
 		if err := sendMessage(s, c, msg); err != nil {
 			log.Print(err.Error())
@@ -98,13 +110,13 @@ func (r *EventProvider) createEventStep(s *discordgo.Session, m *discordgo.Messa
 		}
 
 		msg := `Does this all look correct?. (1 or 2) 
-		Title: %s
-		Description: %s
-		Time : %s
-		Repeating %b
+Title: %s
+Description: %s
+Time: %s
+Repeating: %t
 
-		1. Yes
-		2. No`
+1. Yes
+2. No`
 
 		if err := sendMessage(s, c, fmt.Sprintf(msg, e.name, e.description, e.time.String(), r.registry[m.Author.ID].repeats)); err != nil {
 			log.Print(err.Error())
@@ -112,7 +124,7 @@ func (r *EventProvider) createEventStep(s *discordgo.Session, m *discordgo.Messa
 	case eventStateDone:
 		if m.Content == "1" {
 			// save
-			if err = sendMessage(s, c, "Saving your information.  You do not need to register again."); err != nil {
+			if err = sendMessage(s, c, "The event has been saved."); err != nil {
 				log.Println(err.Error())
 			}
 
@@ -120,7 +132,7 @@ func (r *EventProvider) createEventStep(s *discordgo.Session, m *discordgo.Messa
 			v.state = regStateSaved
 			r.registry[m.Author.ID] = v
 		} else if m.Content == "2" {
-			if err = sendMessage(s, c, "Resetting all your information"); err != nil {
+			if err = sendMessage(s, c, "Resetting the event."); err != nil {
 				log.Println(err.Error())
 			}
 
@@ -129,7 +141,6 @@ func (r *EventProvider) createEventStep(s *discordgo.Session, m *discordgo.Messa
 		} else {
 			_ = sendMessage(s, c, "There was an error with your input - please try again")
 		}
-	case eventStateSaved:
 	}
 
 }

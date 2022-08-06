@@ -54,9 +54,16 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	case cmdHelp:
 		help(s, m)
 	default:
-		hasRegistrationState := r.registrationProvider.registrationWorkflow(m.Author.ID)
-		if hasRegistrationState != nil && !hasRegistrationState.isComplete() {
+		inProgressRegistration := r.registrationProvider.registrationWorkflow(m.Author.ID)
+		if inProgressRegistration != nil && !inProgressRegistration.isComplete() {
 			r.registrationProvider.registrationStep(s, m)
+			return
+		}
+
+		inProgressEventCreate := r.eventProvider.eventWorkflow(m.Author.ID)
+		if inProgressEventCreate != nil && !inProgressEventCreate.isComplete() {
+			r.eventProvider.createEventStep(s, m)
+			return
 		}
 	}
 }
