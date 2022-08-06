@@ -50,7 +50,7 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	case cmdListEvents:
 		r.eventProvider.listEvents(s, m)
 	case cmdCreateEvent:
-		r.eventProvider.createEvent(s, m)
+		r.eventProvider.createEventStep(s, m)
 	case cmdHelp:
 		help(s, m)
 	default:

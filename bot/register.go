@@ -44,9 +44,7 @@ func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discord
 		return
 	}
 
-	actioned := r.init(c, s, m)
-
-	if actioned {
+	if actioned := r.init(c, s, m); actioned {
 		return
 	}
 
