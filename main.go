@@ -2,18 +2,21 @@ package main
 
 import (
 	"eqRaidBot/bot"
+	"eqRaidBot/db"
 	"fmt"
-	"github.com/Netflix/go-env"
-	"github.com/bwmarrin/discordgo"
-	"github.com/joho/godotenv"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/Netflix/go-env"
+	"github.com/bwmarrin/discordgo"
+	"github.com/joho/godotenv"
 )
 
 type config struct {
 	DiscordToken string `env:"TOKEN"`
+	DbURI        string `db_uri:"DB_URI"`
 	Extras       env.EnvSet
 }
 
@@ -26,7 +29,12 @@ func main() {
 		log.Fatal(fmt.Sprintf("Error creating discord session: %s", err.Error()))
 	}
 
-	cmds := bot.NewCommands()
+	conn, err := db.NewPgPool(conf.DbURI)
+	if err != nil {
+		log.Fatal(fmt.Sprintf("problem establishing connection to db: %s", err.Error()))
+	}
+
+	cmds := bot.NewCommands(conn)
 
 	dg.AddHandler(cmds.MessageCreated)
 

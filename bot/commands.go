@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 const (
@@ -24,7 +25,7 @@ type Commands struct {
 
 var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
 
-func NewCommands() *Commands {
+func NewCommands(db *pgxpool.Pool) *Commands {
 	return &Commands{
 		registrationProvider: NewRegistryProvider(),
 		attedanceProvider:    NewAttendanceProvider(),
@@ -38,8 +39,6 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 
 	cmd := regMatch.FindString(m.Content)
-
-	log.Printf("got cmd: %s", cmd)
 
 	switch cmd {
 	case cmdRegister:
