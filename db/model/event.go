@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/georgysavva/scany/pgxscan"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -44,4 +45,19 @@ func (r *Event) Save(db *pgxpool.Pool) error {
 	r.Id = row.Id
 
 	return nil
+}
+
+func (r *Event) GetAll(db *pgxpool.Pool) ([]Event, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	defer conn.Release()
+
+	var events []Event
+	pgxscan.Select(context.Background(), db, &events, `SELECT * FROM events 
+	WHERE event_time > NOW() order by event_time desc;`)
+
+	return events, nil
 }

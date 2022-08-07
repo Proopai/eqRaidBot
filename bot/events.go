@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -60,7 +61,20 @@ var eventListText = `All scheduled events are listed below.
 `
 
 func (r *EventProvider) listEvents(s *discordgo.Session, m *discordgo.MessageCreate) {
-	_, err := s.ChannelMessageSend(m.ChannelID, eventListText)
+	e := model.Event{}
+	rows, err := e.GetAll(r.pool)
+	if err != nil {
+		_, err := s.ChannelMessageSend(m.ChannelID, "There was a problem with this request.")
+		log.Println(err.Error())
+		return
+	}
+
+	var eventList []string
+	for i, r := range rows {
+		eventList = append(eventList, fmt.Sprintf("**%d. %s %s**: %s", i+1, r.EventTime.Format(time.RFC822), r.Title, r.Description))
+	}
+
+	_, err = s.ChannelMessageSend(m.ChannelID, strings.Join(eventList, "\n"))
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -207,8 +221,7 @@ func (r *EventProvider) timeAck(m *discordgo.MessageCreate) error {
 	if err != nil {
 		return err
 	}
-
-	v.time = t
+	v.time = t.UTC()
 	v.state = eventStateRepeating
 	r.registry[m.Author.ID] = v
 

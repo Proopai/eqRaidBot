@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"eqRaidBot/db/model"
 	"errors"
 	"fmt"
 	"log"
@@ -36,6 +37,17 @@ type registrationState struct {
 	Class  int64
 	Level  int64
 	userId string
+}
+
+func (r *registrationState) toModel() *model.Character {
+	return &model.Character{
+		Name:      r.Name,
+		Class:     r.Class,
+		Level:     r.Level,
+		AA:        0,
+		Bot:       false,
+		CreatedBy: r.userId,
+	}
 }
 
 func (r *registrationState) isComplete() bool {
@@ -93,14 +105,21 @@ func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discord
 		}
 	case regStateDone:
 		if m.Content == "1" {
-			// save
-			if err = sendMessage(s, c, "Saving your information.  You do not need to register again."); err != nil {
+
+			dat := r.registry[m.Author.ID]
+			err := dat.toModel().Save(r.pool)
+
+			if err != nil {
+				log.Println(err.Error())
+				_ = sendMessage(s, c, "There was an error with your input - please try again")
+				return
+			}
+
+			if err = sendMessage(s, c, "Saved your information.  You do not need to register this character again."); err != nil {
 				log.Println(err.Error())
 			}
 
-			v := r.registry[m.Author.ID]
-			v.state = regStateSaved
-			r.registry[m.Author.ID] = v
+			r.reset(m)
 		} else if m.Content == "2" {
 			if err = sendMessage(s, c, "Resetting all your information"); err != nil {
 				log.Println(err.Error())
