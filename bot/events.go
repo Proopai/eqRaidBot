@@ -1,12 +1,14 @@
 package bot
 
 import (
+	"eqRaidBot/db/model"
 	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 )
 
 type EventProvider struct {
+	pool     *pgxpool.Pool
 	registry map[string]eventState
 }
 
@@ -35,15 +38,26 @@ func (r *eventState) isComplete() bool {
 	return r.state == eventStateSaved
 }
 
-func NewEventProvider() *EventProvider {
-	return &EventProvider{registry: make(map[string]eventState)}
+func (r *eventState) toModel() *model.Event {
+	return &model.Event{
+		Title:        r.name,
+		Description:  r.description,
+		EventTime:    r.time,
+		IsRepeatable: r.repeats,
+		CreatedBy:    r.userId,
+	}
+}
+
+func NewEventProvider(db *pgxpool.Pool) *EventProvider {
+	return &EventProvider{
+		pool:     db,
+		registry: make(map[string]eventState),
+	}
 }
 
 var eventListText = `All scheduled events are listed below.
-1.
-2.
-3.
-4.`
+%s
+`
 
 func (r *EventProvider) listEvents(s *discordgo.Session, m *discordgo.MessageCreate) {
 	_, err := s.ChannelMessageSend(m.ChannelID, eventListText)
@@ -123,14 +137,20 @@ Repeating: %t
 		}
 	case eventStateDone:
 		if m.Content == "1" {
-			// save
+			dat := r.registry[m.Author.ID]
+			err := dat.toModel().Save(r.pool)
+
+			if err != nil {
+				log.Printf(err.Error())
+				_ = sendMessage(s, c, "There was an error saving the event!")
+				return
+			}
+
 			if err = sendMessage(s, c, "The event has been saved."); err != nil {
 				log.Println(err.Error())
 			}
 
-			v := r.registry[m.Author.ID]
-			v.state = regStateSaved
-			r.registry[m.Author.ID] = v
+			r.reset(m)
 		} else if m.Content == "2" {
 			if err = sendMessage(s, c, "Resetting the event."); err != nil {
 				log.Println(err.Error())

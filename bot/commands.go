@@ -27,9 +27,9 @@ var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
 
 func NewCommands(db *pgxpool.Pool) *Commands {
 	return &Commands{
-		registrationProvider: NewRegistryProvider(),
+		registrationProvider: NewRegistryProvider(db),
 		attedanceProvider:    NewAttendanceProvider(),
-		eventProvider:        NewEventProvider(),
+		eventProvider:        NewEventProvider(db),
 	}
 }
 

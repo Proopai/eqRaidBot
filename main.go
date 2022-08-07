@@ -16,7 +16,7 @@ import (
 
 type config struct {
 	DiscordToken string `env:"TOKEN"`
-	DbURI        string `db_uri:"DB_URI"`
+	DbURI        string `env:"DB_URI"`
 	Extras       env.EnvSet
 }
 

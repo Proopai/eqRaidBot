@@ -12,3 +12,7 @@ type Character struct {
 	CreatedBy string
 	CreatedAt time.Time
 }
+
+func (r *Character) Save() error {
+	return nil
+}

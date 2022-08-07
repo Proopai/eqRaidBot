@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 const (
@@ -18,11 +19,15 @@ const (
 )
 
 type RegistrationProvider struct {
+	pool     *pgxpool.Pool
 	registry map[string]registrationState
 }
 
-func NewRegistryProvider() *RegistrationProvider {
-	return &RegistrationProvider{registry: make(map[string]registrationState)}
+func NewRegistryProvider(db *pgxpool.Pool) *RegistrationProvider {
+	return &RegistrationProvider{
+		pool:     db,
+		registry: make(map[string]registrationState),
+	}
 }
 
 type registrationState struct {
