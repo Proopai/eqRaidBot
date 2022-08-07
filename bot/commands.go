@@ -14,6 +14,7 @@ const (
 	cmdSplit       = "!split"
 	cmdListEvents  = "!list-events"
 	cmdCreateEvent = "!create-event"
+	cmdRoster      = "!roster"
 	cmdHelp        = "!help"
 )
 
