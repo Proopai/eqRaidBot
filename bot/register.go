@@ -45,7 +45,7 @@ func (r *registrationState) toModel() *model.Character {
 		Class:     r.Class,
 		Level:     r.Level,
 		AA:        0,
-		Bot:       false,
+		IsBot:     false,
 		CreatedBy: r.userId,
 	}
 }

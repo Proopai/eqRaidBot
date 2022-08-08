@@ -14,17 +14,17 @@ import (
 )
 
 const (
-	attendStateChar  = 0
-	attendStateEvent = 1
+	attendStateChar  = 1
+	attendStateEvent = 2
 	attendStateDone  = 3
+	attendStateSaved = 4
 )
 
 type AttendanceProvider struct {
 	pool     *pgxpool.Pool
 	registry map[string]AttendanceState
-	charReg  map[string]map[int]int64
-	eventReg map[string]map[int]int64
-	state    AttendanceState
+	charReg  map[string]map[int]model.Character
+	eventReg map[string]map[int]model.Event
 }
 
 type AttendanceState struct {
@@ -42,11 +42,24 @@ func (r *AttendanceState) toModel() *model.Attendance {
 	}
 }
 
-func NewAttendanceProvider() *AttendanceProvider {
+func (r *AttendanceState) isComplete() bool {
+	return r.state == attendStateSaved && r.characterId != 0 && r.eventId != 0
+}
+
+func NewAttendanceProvider(db *pgxpool.Pool) *AttendanceProvider {
 	return &AttendanceProvider{
 		registry: make(map[string]AttendanceState),
-		charReg:  make(map[string]map[int]int64),
-		eventReg: make(map[string]map[int]int64),
+		charReg:  make(map[string]map[int]model.Character),
+		eventReg: make(map[string]map[int]model.Event),
+		pool:     db,
+	}
+}
+
+func (r *AttendanceProvider) attendWorkflow(userId string) *AttendanceState {
+	if v, ok := r.registry[userId]; ok {
+		return &v
+	} else {
+		return nil
 	}
 }
 
@@ -57,20 +70,25 @@ func (r *AttendanceProvider) attendanceStep(s *discordgo.Session, m *discordgo.M
 		return
 	}
 
-	if actioned := r.init(c, s, m); actioned {
+	actioned, err := r.init(c, s, m)
+	if err != nil {
+		_ = sendMessage(s, c, err.Error())
 		return
 	}
 
-	att := r.registry[m.Author.ID]
+	if actioned {
+		return
+	}
 
-	switch att.state {
+	switch r.registry[m.Author.ID].state {
 	case attendStateChar:
 		err := r.charAck(c, s, m)
 		if err != nil {
+			log.Println(err.Error())
 			_ = sendMessage(s, c, "There was a problem fetching the events")
 		}
 	case attendStateEvent:
-		err := r.eventAck(m)
+		err := r.eventAck(c, s, m)
 		if err != nil {
 			_ = sendMessage(s, c, "There was a problem fetching the events")
 		}
@@ -82,20 +100,18 @@ func (r *AttendanceProvider) attendanceStep(s *discordgo.Session, m *discordgo.M
 
 }
 
-func (r *AttendanceProvider) init(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) bool {
+func (r *AttendanceProvider) init(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) (bool, error) {
 	// check the database to see if they have previously registered
 	if _, ok := r.registry[m.Author.ID]; !ok {
 		char := model.Character{}
 		toons, err := char.GetByOwner(r.pool, m.Author.ID)
 		if err != nil {
 			log.Println(err.Error())
-			_ = sendMessage(s, c, "There was an error with your input - please try again")
+			return false, errors.New("There was an error with your input - please try again")
 		}
 
 		if len(toons) == 0 {
-			if err := sendMessage(s, c, fmt.Sprintf("You have no characters register, please type **!register** to add one.")); err != nil {
-				return false
-			}
+			return false, errors.New("You have no characters register, please type **!register** to add one.")
 		}
 
 		r.registry[m.Author.ID] = AttendanceState{
@@ -103,23 +119,22 @@ func (r *AttendanceProvider) init(c *discordgo.Channel, s *discordgo.Session, m 
 			userId: m.Author.ID,
 		}
 
-		r.charReg[m.Author.ID] = make(map[int]int64)
-		r.eventReg[m.Author.ID] = make(map[int]int64)
+		r.charReg[m.Author.ID] = make(map[int]model.Character)
+		r.eventReg[m.Author.ID] = make(map[int]model.Event)
 
 		var charString []string
 		for i, t := range toons {
-			r.charReg[m.Author.ID][i] = t.Id
+			r.charReg[m.Author.ID][i] = t
 			charString = append(charString, fmt.Sprintf("%d. %s", i, t.Name))
 		}
 
 		if err := sendMessage(s, c, fmt.Sprintf("Hello %s, which character will you be brining?\n%s", m.Author.Username, strings.Join(charString, "\n"))); err != nil {
-			return false
+			return true, err
 		}
-
-		return true
+		return true, nil
 	}
 
-	return false
+	return false, nil
 }
 
 func (r *AttendanceProvider) charAck(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) error {
@@ -128,17 +143,20 @@ func (r *AttendanceProvider) charAck(c *discordgo.Channel, s *discordgo.Session,
 		return err
 	}
 
+	vs := r.registry[m.Author.ID]
+
 	for k, v := range r.charReg[m.Author.ID] {
 		if k == i {
-			r.state.characterId = v
+			vs.characterId = v.Id
 			break
 		}
 	}
 
-	if r.state.characterId == 0 {
+	if vs.characterId == 0 {
 		return errors.New("invalid character selection")
 	} else {
-		r.state.state = attendStateEvent
+		vs.state = attendStateEvent
+		r.registry[m.Author.ID] = vs
 	}
 
 	event := model.Event{}
@@ -150,7 +168,7 @@ func (r *AttendanceProvider) charAck(c *discordgo.Channel, s *discordgo.Session,
 	var eventString []string
 
 	for i, e := range events {
-		r.eventReg[m.Author.ID][i] = e.Id
+		r.eventReg[m.Author.ID][i] = e
 		eventString = append(eventString, fmt.Sprintf("%d. %s %s", i, e.Title, e.EventTime.Format(time.RFC822)))
 	}
 	err = sendMessage(s, c, fmt.Sprintf("What event are you signing up for?\n%s", strings.Join(eventString, "\n")))
@@ -161,23 +179,53 @@ func (r *AttendanceProvider) charAck(c *discordgo.Channel, s *discordgo.Session,
 	return nil
 }
 
-func (r *AttendanceProvider) eventAck(m *discordgo.MessageCreate) error {
+func (r *AttendanceProvider) eventAck(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) error {
 	i, err := strconv.Atoi(m.Content)
 	if err != nil {
 		return err
 	}
 
+	vs := r.registry[m.Author.ID]
+
 	for k, v := range r.eventReg[m.Author.ID] {
 		if k == i {
-			r.state.eventId = v
+			vs.eventId = v.Id
 			break
 		}
 	}
 
-	if r.state.eventId == 0 {
+	if vs.eventId == 0 {
 		return errors.New("invalid event selection")
 	} else {
-		r.state.state = attendStateDone
+		vs.state = attendStateDone
+		r.registry[m.Author.ID] = vs
+	}
+
+	var (
+		chosenChar  model.Character
+		chosenEvent model.Event
+	)
+
+	for _, v := range r.charReg[m.Author.ID] {
+		if v.Id == r.registry[m.Author.ID].characterId {
+			chosenChar = v
+		}
+
+	}
+
+	for _, v := range r.eventReg[m.Author.ID] {
+		if v.Id == r.registry[m.Author.ID].eventId {
+			chosenEvent = v
+		}
+	}
+
+	err = sendMessage(s, c, fmt.Sprintf("Does this all look correct?\nCharacter: %s\nEvent: %s\n1. Yes\n2. No",
+		chosenChar.Name,
+		chosenEvent.Title,
+	))
+
+	if err != nil {
+		return err
 	}
 	return nil
 
@@ -197,6 +245,7 @@ func (r *AttendanceProvider) doneAck(s *discordgo.Session, c *discordgo.Channel,
 		}
 
 		r.reset(m)
+		return nil
 	} else if m.Content == "2" {
 		if err := sendMessage(s, c, "Resetting all your information"); err != nil {
 			return err
@@ -204,6 +253,7 @@ func (r *AttendanceProvider) doneAck(s *discordgo.Session, c *discordgo.Channel,
 
 		r.reset(m)
 		r.init(c, s, m)
+		return nil
 	}
 	return errors.New("invalid input")
 

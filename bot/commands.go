@@ -29,7 +29,7 @@ var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
 func NewCommands(db *pgxpool.Pool) *Commands {
 	return &Commands{
 		registrationProvider: NewRegistryProvider(db),
-		attedanceProvider:    NewAttendanceProvider(),
+		attedanceProvider:    NewAttendanceProvider(db),
 		eventProvider:        NewEventProvider(db),
 	}
 }
@@ -63,6 +63,12 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 		inProgressEventCreate := r.eventProvider.eventWorkflow(m.Author.ID)
 		if inProgressEventCreate != nil && !inProgressEventCreate.isComplete() {
 			r.eventProvider.createEventStep(s, m)
+			return
+		}
+
+		inProgressAttend := r.attedanceProvider.attendWorkflow(m.Author.ID)
+		if inProgressAttend != nil && !inProgressAttend.isComplete() {
+			r.attedanceProvider.attendanceStep(s, m)
 			return
 		}
 	}

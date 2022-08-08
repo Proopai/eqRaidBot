@@ -23,11 +23,12 @@ func (r *Attendance) Save(db *pgxpool.Pool) error {
 	defer conn.Release()
 
 	conn.QueryRow(context.Background(), `INSERT INTO attendance 
-	(character_id, event_id, withdrawn) 
-	VALUES ($1, $2, $3);`,
+	(character_id, event_id, withdrawn, updated_at) 
+	VALUES ($1, $2, $3, $4);`,
 		r.CharacterId,
 		r.EventId,
 		r.IsWithdrawn,
+		time.Now(),
 	)
 
 	return nil

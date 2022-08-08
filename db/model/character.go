@@ -14,7 +14,7 @@ type Character struct {
 	Class     int64
 	Level     int64
 	AA        int64
-	Bot       bool
+	IsBot     bool
 	CreatedBy string
 	CreatedAt time.Time
 }
@@ -36,7 +36,7 @@ func (r *Character) Save(db *pgxpool.Pool) error {
 		r.Class,
 		r.Level,
 		r.AA,
-		r.Bot,
+		r.IsBot,
 		r.CreatedBy,
 	).Scan(&row)
 
