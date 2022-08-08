@@ -4,28 +4,31 @@ import (
 	"context"
 	"time"
 
-	"github.com/georgysavva/scany/pgxscan"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type Attendance struct {
 	EventId     int64
 	CharacterId int64
-	IsWithdrawn int64
+	IsWithdrawn bool
 	CreatedAt   time.Time
 }
 
-func (r *Attendance) GetByOwner(db *pgxpool.Pool, userId string) ([]Character, error) {
+func (r *Attendance) Save(db *pgxpool.Pool) error {
 	conn, err := db.Acquire(context.Background())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	defer conn.Release()
 
-	var events []Event
-	pgxscan.Select(context.Background(), db, &events, `SELECT * FROM events 
-	WHERE event_time > NOW() order by event_time desc;`)
+	conn.QueryRow(context.Background(), `INSERT INTO attendance 
+	(character_id, event_id, withdrawn) 
+	VALUES ($1, $2, $3);`,
+		r.CharacterId,
+		r.EventId,
+		r.IsWithdrawn,
+	)
 
-	return events, nil
+	return nil
 }

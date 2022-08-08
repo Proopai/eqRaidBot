@@ -45,7 +45,7 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	case cmdRegister:
 		r.registrationProvider.registrationStep(s, m)
 	case cmdAttend:
-		r.attedanceProvider.recordAttendance(s, m)
+		r.attedanceProvider.attendanceStep(s, m)
 	case cmdSplit:
 	case cmdListEvents:
 		r.eventProvider.listEvents(s, m)
