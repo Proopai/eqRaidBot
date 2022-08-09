@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"eqRaidBot/bot/command"
 	"log"
 	"regexp"
 
@@ -19,18 +20,18 @@ const (
 )
 
 type Commands struct {
-	registrationProvider *RegistrationProvider
-	attedanceProvider    *AttendanceProvider
-	eventProvider        *EventProvider
+	registrationProvider *command.RegistrationProvider
+	attedanceProvider    *command.AttendanceProvider
+	eventProvider        *command.EventProvider
 }
 
 var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
 
 func NewCommands(db *pgxpool.Pool) *Commands {
 	return &Commands{
-		registrationProvider: NewRegistryProvider(db),
-		attedanceProvider:    NewAttendanceProvider(db),
-		eventProvider:        NewEventProvider(db),
+		registrationProvider: command.NewRegistryProvider(db),
+		attedanceProvider:    command.NewAttendanceProvider(db),
+		eventProvider:        command.NewEventProvider(db),
 	}
 }
 
@@ -43,32 +44,32 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 
 	switch cmd {
 	case cmdRegister:
-		r.registrationProvider.registrationStep(s, m)
+		r.registrationProvider.Step(s, m)
 	case cmdAttend:
-		r.attedanceProvider.attendanceStep(s, m)
+		r.attedanceProvider.Step(s, m)
 	case cmdSplit:
 	case cmdListEvents:
-		r.eventProvider.listEvents(s, m)
+		r.eventProvider.ListEvents(s, m)
 	case cmdCreateEvent:
-		r.eventProvider.createEventStep(s, m)
+		r.eventProvider.CreateEventStep(s, m)
 	case cmdHelp:
 		help(s, m)
 	default:
-		inProgressRegistration := r.registrationProvider.registrationWorkflow(m.Author.ID)
-		if inProgressRegistration != nil && !inProgressRegistration.isComplete() {
-			r.registrationProvider.registrationStep(s, m)
+		inProgressRegistration := r.registrationProvider.RegistrationWorkflow(m.Author.ID)
+		if inProgressRegistration != nil && !inProgressRegistration.IsComplete() {
+			r.registrationProvider.Step(s, m)
 			return
 		}
 
-		inProgressEventCreate := r.eventProvider.eventWorkflow(m.Author.ID)
-		if inProgressEventCreate != nil && !inProgressEventCreate.isComplete() {
-			r.eventProvider.createEventStep(s, m)
+		inProgressEventCreate := r.eventProvider.EventWorkflow(m.Author.ID)
+		if inProgressEventCreate != nil && !inProgressEventCreate.IsComplete() {
+			r.eventProvider.CreateEventStep(s, m)
 			return
 		}
 
-		inProgressAttend := r.attedanceProvider.attendWorkflow(m.Author.ID)
-		if inProgressAttend != nil && !inProgressAttend.isComplete() {
-			r.attedanceProvider.attendanceStep(s, m)
+		inProgressAttend := r.attedanceProvider.AttendWorkflow(m.Author.ID)
+		if inProgressAttend != nil && !inProgressAttend.IsComplete() {
+			r.attedanceProvider.Step(s, m)
 			return
 		}
 	}

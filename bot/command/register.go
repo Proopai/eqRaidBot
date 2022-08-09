@@ -1,6 +1,7 @@
-package bot
+package command
 
 import (
+	"eqRaidBot/bot/eq"
 	"eqRaidBot/db/model"
 	"errors"
 	"fmt"
@@ -50,11 +51,11 @@ func (r *registrationState) toModel() *model.Character {
 	}
 }
 
-func (r *registrationState) isComplete() bool {
+func (r *registrationState) IsComplete() bool {
 	return r.state == regStateSaved && r.Name != "" && r.Class != 0 && r.Level != 0
 }
 
-func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (r *RegistrationProvider) Step(s *discordgo.Session, m *discordgo.MessageCreate) {
 	c, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Print(err.Error())
@@ -78,7 +79,7 @@ func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discord
 	case regStateName:
 		r.nameAck(m)
 
-		err = sendMessage(s, c, fmt.Sprintf("What is your class? Respond with the number that corresponds. \n%s", classChoiceString()))
+		err = sendMessage(s, c, fmt.Sprintf("What is your class? Respond with the number that corresponds. \n%s", eq.ClassChoiceString()))
 		if err != nil {
 			log.Print(err.Error())
 		}
@@ -96,11 +97,11 @@ func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discord
 	case regStateLevel:
 		err = r.levelAck(m)
 		if err != nil {
-			_ = sendMessage(s, c, fmt.Sprintf("There was an error with your input - please try again, the current max level is %d", maxLevel))
+			_ = sendMessage(s, c, fmt.Sprintf("There was an error with your input - please try again, the current max level is %d", eq.MaxLevel))
 			return
 		}
 
-		if err = sendMessage(s, c, fmt.Sprintf("Is this all correct?\nName: %s\nClass: %s\nLevel: %d\n\n1. Yes\n2. No", reg.Name, classChoiceMap[reg.Class], r.registry[m.Author.ID].Level)); err != nil {
+		if err = sendMessage(s, c, fmt.Sprintf("Is this all correct?\nName: %s\nClass: %s\nLevel: %d\n\n1. Yes\n2. No", reg.Name, eq.ClassChoiceMap[reg.Class], r.registry[m.Author.ID].Level)); err != nil {
 			log.Println(err.Error())
 		}
 	case regStateDone:
@@ -135,7 +136,7 @@ func (r *RegistrationProvider) registrationStep(s *discordgo.Session, m *discord
 
 }
 
-func (r *RegistrationProvider) registrationWorkflow(userId string) *registrationState {
+func (r *RegistrationProvider) RegistrationWorkflow(userId string) *registrationState {
 	if v, ok := r.registry[userId]; ok {
 		return &v
 	} else {
@@ -178,7 +179,7 @@ func (r *RegistrationProvider) classAck(m *discordgo.MessageCreate) error {
 		return err
 	}
 
-	if _, ok := classChoiceMap[classId]; !ok {
+	if _, ok := eq.ClassChoiceMap[classId]; !ok {
 		return errors.New("invalid class")
 	}
 
@@ -195,7 +196,7 @@ func (r *RegistrationProvider) levelAck(m *discordgo.MessageCreate) error {
 		return err
 	}
 
-	if i > maxLevel {
+	if i > eq.MaxLevel {
 		return errors.New("level is too high")
 	}
 

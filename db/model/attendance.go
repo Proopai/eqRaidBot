@@ -33,3 +33,7 @@ func (r *Attendance) Save(db *pgxpool.Pool) error {
 
 	return nil
 }
+
+func (r *Attendance) GetAttendees(db *pgxpool.Pool, eventId int64) ([]Character, error) {
+
+}

@@ -1,4 +1,4 @@
-package bot
+package command
 
 import (
 	"eqRaidBot/db/model"
@@ -35,7 +35,7 @@ type eventState struct {
 	state       int64
 }
 
-func (r *eventState) isComplete() bool {
+func (r *eventState) IsComplete() bool {
 	return r.state == eventStateSaved
 }
 
@@ -60,7 +60,7 @@ var eventListText = `All scheduled events are listed below.
 %s
 `
 
-func (r *EventProvider) listEvents(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (r *EventProvider) ListEvents(s *discordgo.Session, m *discordgo.MessageCreate) {
 	e := model.Event{}
 	rows, err := e.GetAll(r.pool)
 	if err != nil {
@@ -80,7 +80,7 @@ func (r *EventProvider) listEvents(s *discordgo.Session, m *discordgo.MessageCre
 	}
 }
 
-func (r *EventProvider) eventWorkflow(userId string) *eventState {
+func (r *EventProvider) EventWorkflow(userId string) *eventState {
 	if v, ok := r.registry[userId]; ok {
 		return &v
 	} else {
@@ -88,7 +88,7 @@ func (r *EventProvider) eventWorkflow(userId string) *eventState {
 	}
 }
 
-func (r *EventProvider) createEventStep(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (r *EventProvider) CreateEventStep(s *discordgo.Session, m *discordgo.MessageCreate) {
 	c, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Print(err.Error())

@@ -1,4 +1,4 @@
-package bot
+package command
 
 import (
 	"eqRaidBot/db/model"
@@ -42,7 +42,7 @@ func (r *AttendanceState) toModel() *model.Attendance {
 	}
 }
 
-func (r *AttendanceState) isComplete() bool {
+func (r *AttendanceState) IsComplete() bool {
 	return r.state == attendStateSaved && r.characterId != 0 && r.eventId != 0
 }
 
@@ -55,7 +55,7 @@ func NewAttendanceProvider(db *pgxpool.Pool) *AttendanceProvider {
 	}
 }
 
-func (r *AttendanceProvider) attendWorkflow(userId string) *AttendanceState {
+func (r *AttendanceProvider) AttendWorkflow(userId string) *AttendanceState {
 	if v, ok := r.registry[userId]; ok {
 		return &v
 	} else {
@@ -63,7 +63,7 @@ func (r *AttendanceProvider) attendWorkflow(userId string) *AttendanceState {
 	}
 }
 
-func (r *AttendanceProvider) attendanceStep(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (r *AttendanceProvider) Step(s *discordgo.Session, m *discordgo.MessageCreate) {
 	c, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Print(err.Error())
