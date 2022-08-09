@@ -36,10 +36,23 @@ func NewSplitProvider(db *pgxpool.Pool) *SplitProvider {
 	return &SplitProvider{
 		pool:     db,
 		eventReg: make(map[string]map[int]model.Event),
+		registry: make(map[string]SplitState),
 	}
 }
 
-func (r *SplitProvider) Split(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (r *SplitState) IsComplete() bool {
+	return r.state == splitStateSplit && r.eventId != 0
+}
+
+func (r *SplitProvider) SplitWorkflow(userId string) *SplitState {
+	if v, ok := r.registry[userId]; ok {
+		return &v
+	} else {
+		return nil
+	}
+}
+
+func (r *SplitProvider) Step(s *discordgo.Session, m *discordgo.MessageCreate) {
 	c, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Print(err.Error())

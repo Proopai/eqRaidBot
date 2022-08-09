@@ -23,6 +23,7 @@ type Commands struct {
 	registrationProvider *command.RegistrationProvider
 	attedanceProvider    *command.AttendanceProvider
 	eventProvider        *command.EventProvider
+	splitProvider        *command.SplitProvider
 }
 
 var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
@@ -32,6 +33,7 @@ func NewCommands(db *pgxpool.Pool) *Commands {
 		registrationProvider: command.NewRegistryProvider(db),
 		attedanceProvider:    command.NewAttendanceProvider(db),
 		eventProvider:        command.NewEventProvider(db),
+		splitProvider:        command.NewSplitProvider(db),
 	}
 }
 
@@ -48,6 +50,7 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	case cmdAttend:
 		r.attedanceProvider.Step(s, m)
 	case cmdSplit:
+		r.splitProvider.Step(s, m)
 	case cmdListEvents:
 		r.eventProvider.ListEvents(s, m)
 	case cmdCreateEvent:
@@ -70,6 +73,12 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 		inProgressAttend := r.attedanceProvider.AttendWorkflow(m.Author.ID)
 		if inProgressAttend != nil && !inProgressAttend.IsComplete() {
 			r.attedanceProvider.Step(s, m)
+			return
+		}
+
+		inProgressSplit := r.splitProvider.SplitWorkflow(m.Author.ID)
+		if inProgressSplit != nil && !inProgressSplit.IsComplete() {
+			r.splitProvider.Step(s, m)
 			return
 		}
 	}

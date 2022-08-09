@@ -1,6 +1,9 @@
 package eq
 
-import "eqRaidBot/db/model"
+import (
+	"eqRaidBot/db/model"
+	"fmt"
+)
 
 type Splitter struct {
 	characters []model.Character
@@ -13,6 +16,6 @@ func NewSplitter(c []model.Character) *Splitter {
 }
 
 func (r *Splitter) Split(groupN int) [][]model.Character {
-
+	fmt.Println(r.characters, groupN)
 	return nil
 }

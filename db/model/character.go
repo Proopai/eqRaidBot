@@ -59,3 +59,18 @@ func (r *Character) GetByOwner(db *pgxpool.Pool, userId string) ([]Character, er
 
 	return toons, nil
 }
+
+func (r *Character) GetWhereIn(db *pgxpool.Pool, characterIds []int64) ([]Character, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	defer conn.Release()
+
+	var toons []Character
+	pgxscan.Select(context.Background(), db, &toons, `SELECT * FROM characters 
+	WHERE id IN ($1);`, characterIds)
+
+	return toons, nil
+}
