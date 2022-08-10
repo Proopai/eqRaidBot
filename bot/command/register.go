@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -53,6 +54,29 @@ func (r *registrationState) toModel() *model.Character {
 
 func (r *registrationState) IsComplete() bool {
 	return r.state == regStateSaved && r.Name != "" && r.Class != 0 && r.Level != 0
+}
+
+func (r *RegistrationProvider) MyCharacters(s *discordgo.Session, m *discordgo.MessageCreate) {
+	c, err := s.UserChannelCreate(m.Author.ID)
+	if err != nil {
+		log.Print(err.Error())
+		return
+	}
+
+	char := model.Character{}
+	toons, err := char.GetByOwner(r.pool, m.Author.ID)
+	if err != nil {
+		log.Println(err.Error())
+		_ = sendMessage(s, c, "There was a problem with finding your characters!")
+		return
+	}
+
+	var charStrings []string
+
+	for i, k := range toons {
+		charStrings = append(charStrings, fmt.Sprintf("%d. %s - %d %s %s", i+1, k.Name, k.Level, eq.ClassChoiceMap[k.Class], ""))
+	}
+	sendMessage(s, c, strings.Join(charStrings, "\n"))
 }
 
 func (r *RegistrationProvider) Step(s *discordgo.Session, m *discordgo.MessageCreate) {

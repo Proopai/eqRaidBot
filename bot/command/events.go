@@ -69,9 +69,21 @@ func (r *EventProvider) ListEvents(s *discordgo.Session, m *discordgo.MessageCre
 		return
 	}
 
+	var eventIds []int64
+	for _, e := range rows {
+		eventIds = append(eventIds, e.Id)
+	}
+	at := model.Attendance{}
+	attendeeMap, err := at.GetAttendeesForEvents(r.pool, eventIds)
+	if err != nil {
+		_, err := s.ChannelMessageSend(m.ChannelID, "There was a problem with this request.")
+		log.Println(err.Error())
+		return
+	}
+
 	var eventList []string
 	for i, r := range rows {
-		eventList = append(eventList, fmt.Sprintf("**%d. %s %s**: %s", i+1, r.EventTime.Format(time.RFC822), r.Title, r.Description))
+		eventList = append(eventList, fmt.Sprintf("**%d. %s %s**: %s (%d)", i+1, r.EventTime.Format(time.RFC822), r.Title, r.Description, len(attendeeMap[r.Id])))
 	}
 
 	_, err = s.ChannelMessageSend(m.ChannelID, strings.Join(eventList, "\n"))

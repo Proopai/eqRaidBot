@@ -10,13 +10,16 @@ import (
 )
 
 const (
-	cmdRegister    = "!register"
-	cmdAttend      = "!attend"
-	cmdSplit       = "!split"
-	cmdListEvents  = "!list-events"
-	cmdCreateEvent = "!create-event"
-	cmdRoster      = "!roster"
-	cmdHelp        = "!help"
+	cmdRegister        = "!register"
+	cmdMyCharacters    = "!my-characters"
+	cmdRemoveCharacter = "!remove-character"
+	cmdAttend          = "!attend"
+	cmdWithdraw        = "!withdraw"
+	cmdSplit           = "!split"
+	cmdListEvents      = "!list-events"
+	cmdCreateEvent     = "!create-event"
+	cmdRoster          = "!roster"
+	cmdHelp            = "!help"
 )
 
 type Commands struct {
@@ -47,6 +50,11 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	switch cmd {
 	case cmdRegister:
 		r.registrationProvider.Step(s, m)
+	case cmdMyCharacters:
+		r.registrationProvider.MyCharacters(s, m)
+	case cmdRemoveCharacter:
+		// @TODO
+		break
 	case cmdAttend:
 		r.attedanceProvider.Step(s, m)
 	case cmdSplit:
@@ -87,12 +95,15 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 var helpMessage = `Eq Raid Bot is a discord based EverQuest raid helper. 
 Please refer to the list of commands below. 
 
-**!register** 		- prompts the bot to begin a workflow which allows a user to registers ones characters
-**!attend**   		- prompts the user to confirm their attendance to an event
-**!split**    		- splits registered members into N balanced groups for an event
-**!list-events**    - lists events
-**!create-event**   - prompts the bot to begin the create event workflow
-**!help**     	    - shows this message
+**!register** 		  - prompts the bot to begin a workflow which allows a user to registers ones characters.
+**!my-characters** 	  - shows the users registered characters.
+**!remove-character** - deletes a character from the list of selectable characters for a given user. (wip)
+**!attend**   		  - prompts the user to confirm their attendance to an event.
+**!withdraw**   	  - allows the user to reneg on a event they signed up for. (wip)
+**!split**    		  - splits registered members into N balanced groups for an event (wip)
+**!list-events**      - lists events.
+**!create-event**     - prompts the bot to begin the create event workflow
+**!help**     	      - shows this message
 `
 
 func help(s *discordgo.Session, m *discordgo.MessageCreate) {

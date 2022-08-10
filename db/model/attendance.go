@@ -61,3 +61,44 @@ func (r *Attendance) GetAttendees(db *pgxpool.Pool, eventId int64) ([]Character,
 	return toons, nil
 
 }
+
+func (r *Attendance) GetAttendeesForEvents(db *pgxpool.Pool, eventIds []int64) (map[int64][]Character, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var attendees []Attendance
+	pgxscan.Select(context.Background(), db, &attendees, `SELECT * FROM attendance 
+	WHERE event_id IN ($1);`, eventIds)
+
+	defer conn.Release()
+
+	var charIds []int64
+	for _, i := range attendees {
+		charIds = append(charIds, i.CharacterId)
+	}
+
+	char := Character{}
+	toons, err := char.GetWhereIn(db, charIds)
+	if err != nil {
+		return nil, err
+	}
+
+	cMap := make(map[int64]Character)
+	for _, c := range toons {
+		cMap[c.Id] = c
+	}
+
+	res := make(map[int64][]Character)
+	for _, a := range attendees {
+		if _, ok := res[a.EventId]; !ok {
+			res[a.EventId] = []Character{cMap[a.CharacterId]}
+			continue
+		}
+		res[a.EventId] = append(res[a.EventId], cMap[a.CharacterId])
+	}
+
+	return res, nil
+
+}

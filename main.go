@@ -2,7 +2,9 @@ package main
 
 import (
 	"eqRaidBot/bot"
+	"eqRaidBot/bot/eq"
 	"eqRaidBot/db"
+	"eqRaidBot/util"
 	"fmt"
 	"log"
 	"os"
@@ -35,6 +37,14 @@ func main() {
 	}
 
 	cmds := bot.NewCommands(conn)
+
+	t, spread := util.GenerateDBObjects(143)
+
+	fmt.Println(len(t), spread)
+	splitter := eq.NewSplitter(t)
+
+	splitter.Split(3)
+	os.Exit(1)
 
 	dg.AddHandler(cmds.MessageCreated)
 

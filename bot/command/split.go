@@ -18,6 +18,7 @@ const (
 	splitStateStart = 1
 	splitStateEvent = 2
 	splitStateSplit = 3
+	splitStateDone  = 4
 )
 
 type SplitProvider struct {
@@ -71,16 +72,22 @@ func (r *SplitProvider) Step(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	switch r.registry[m.Author.ID].state {
 	case splitStateStart:
-		err := r.ackEvent(c, s, m)
-		if err != nil {
+		if err := r.ackEvent(c, s, m); err != nil {
+			log.Println(err.Error())
 			_ = sendMessage(s, c, "There was a problem with this request")
 		}
 	case splitStateEvent:
-		err := r.ackSplit(c, s, m)
-		if err != nil {
+		if err := r.ackSplit(c, s, m); err != nil {
+			log.Println(err.Error())
 			_ = sendMessage(s, c, "There was a problem with this request")
 		}
-	case splitStateSplit:
+		/*
+				case splitStateSplit:
+					if err := r.ackDone(c, s, m); err != nil {
+						_ = sendMessage(s, c, "There was a problem with this request")
+					}
+			sadare
+		*/
 	}
 
 }
@@ -103,7 +110,7 @@ func (r *SplitProvider) ackEvent(c *discordgo.Channel, s *discordgo.Session, m *
 	if vs.eventId == 0 {
 		return errors.New("invalid event selection")
 	} else {
-		vs.state = splitStateSplit
+		vs.state = splitStateEvent
 		r.registry[m.Author.ID] = vs
 	}
 
@@ -138,10 +145,13 @@ func (r *SplitProvider) init(c *discordgo.Channel, s *discordgo.Session, m *disc
 		e := model.Event{}
 		events, err := e.GetAll(r.pool)
 		if err != nil {
-			log.Println("error")
-			_ = sendMessage(s, c, "There was a problem with this request")
 			return false, err
 		}
+
+		if len(events) == 0 {
+			return false, errors.New("There are no events.")
+		}
+
 		r.registry[m.Author.ID] = SplitState{
 			state:  splitStateStart,
 			userId: m.Author.ID,
