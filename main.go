@@ -38,12 +38,12 @@ func main() {
 
 	cmds := bot.NewCommands(conn)
 
-	t, spread := util.GenerateDBObjects(143)
-
-	fmt.Println(len(t), spread)
+	t, spread := util.GenerateDBObjects(123)
+	for k, v := range spread {
+		fmt.Println(k, v)
+	}
 	splitter := eq.NewSplitter(t)
-
-	splitter.Split(3)
+	splitter.Split(5)
 	os.Exit(1)
 
 	dg.AddHandler(cmds.MessageCreated)
