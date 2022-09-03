@@ -81,16 +81,16 @@ func (r *SplitProvider) Step(s *discordgo.Session, m *discordgo.MessageCreate) {
 			log.Println(err.Error())
 			_ = sendMessage(s, c, "There was a problem with this request")
 		}
-		/*
-				case splitStateSplit:
-					if err := r.ackDone(c, s, m); err != nil {
-						_ = sendMessage(s, c, "There was a problem with this request")
-					}
-			sadare
-		*/
+		// case splitStateSplit:
+		// 	if err := r.ackDone(c, s, m); err != nil {
+		// 		_ = sendMessage(s, c, "There was a problem with this request")
+		// 	}
 	}
 
 }
+
+// func (r *SplitProvider) ackDone(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) error {
+// }
 
 func (r *SplitProvider) ackEvent(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) error {
 	i, err := strconv.Atoi(m.Content)
@@ -132,11 +132,31 @@ func (r *SplitProvider) ackSplit(c *discordgo.Channel, s *discordgo.Session, m *
 	a := model.Attendance{}
 
 	attendees, err := a.GetAttendees(r.pool, r.registry[m.Author.ID].eventId)
-	splitter := eq.NewSplitter(attendees)
+	if err != nil {
+		return err
+	}
 
-	splitter.Split(i)
+	var splitString string
 
-	return nil
+	splitter := eq.NewSplitter(attendees, false)
+	splits := splitter.Split(i)
+
+	for i, split := range splits {
+		splitString += fmt.Sprintf("**Raid %d\n**", i)
+		for g, group := range split {
+			splitString += fmt.Sprintf("Group %d\n", g)
+			for j, c := range group {
+				if j == 0 {
+					splitString += fmt.Sprintf("**%s - %s**\n", eq.ClassChoiceMap[c.Class], c.Name)
+				} else {
+
+					splitString += fmt.Sprintf("%s - %s\n", eq.ClassChoiceMap[c.Class], c.Name)
+				}
+			}
+		}
+	}
+
+	return sendMessage(s, c, splitString)
 }
 
 func (r *SplitProvider) init(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) (bool, error) {

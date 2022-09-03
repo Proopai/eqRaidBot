@@ -2,14 +2,13 @@ package main
 
 import (
 	"eqRaidBot/bot"
-	"eqRaidBot/bot/eq"
 	"eqRaidBot/db"
-	"eqRaidBot/util"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Netflix/go-env"
 	"github.com/bwmarrin/discordgo"
@@ -36,17 +35,19 @@ func main() {
 		log.Fatal(fmt.Sprintf("problem establishing connection to db: %s", err.Error()))
 	}
 
-	cmds := bot.NewCommands(conn)
+	cmds := bot.NewCommandController(conn)
 
-	t, spread := util.GenerateDBObjects(123)
-	for k, v := range spread {
-		fmt.Println(k, v)
-	}
-	splitter := eq.NewSplitter(t)
-	splitter.Split(5)
-	os.Exit(1)
+	go cmds.Run(15 * time.Second)
 
-	dg.AddHandler(cmds.MessageCreated)
+	//t, spread := util.GenerateDBObjects(123)
+	//for k, v := range spread {
+	//	fmt.Println(k, v)
+	//}
+	//splitter := eq.NewSplitter(t, true)
+	//splitter.Split(3)
+	//os.Exit(1)
+
+	dg.AddHandler(cmds.MessageCreatedHandler)
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages + discordgo.IntentsDirectMessages
 

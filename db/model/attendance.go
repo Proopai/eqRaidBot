@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/georgysavva/scany/pgxscan"
@@ -33,6 +35,39 @@ func (r *Attendance) Save(db *pgxpool.Pool) error {
 	)
 
 	return nil
+}
+
+func (r *Attendance) SaveBatch(db *pgxpool.Pool, rows []Attendance) error {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return err
+	}
+
+	defer conn.Release()
+
+	var (
+		params []string
+		vals   []interface{}
+	)
+
+	now := time.Now()
+
+	for k, r := range rows {
+		params = append(params, fmt.Sprintf("($%d, $%d, $%b, $%v)", k+1, k+2, k+3, k+4))
+		p := []interface{}{
+			r.CharacterId,
+			r.EventId,
+			r.IsWithdrawn,
+			now,
+		}
+		vals = append(vals, p...)
+	}
+
+	q := fmt.Sprintf("INSERT INTO attendance (character_id, event_id, withdrawn, updated_at) VALUES %s;", strings.Join(params, ","))
+	conn.QueryRow(context.Background(), q, vals...)
+
+	return nil
+
 }
 
 func (r *Attendance) GetAttendees(db *pgxpool.Pool, eventId int64) ([]Character, error) {

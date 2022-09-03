@@ -17,9 +17,20 @@ const (
 	regStateName  = 0
 	regStateClass = 1
 	regStateLevel = 3
-	regStateDone  = 4
-	regStateSaved = 5
+	regStateMata  = 4
+	regStateDone  = 5
+	regStateSaved = 6
+
+	typeBox  = 1
+	typeMain = 2
+	typeAlt  = 3
 )
+
+var charTypeMap = map[int64]string{
+	typeBox:  "Box",
+	typeMain: "Main",
+	typeAlt:  "Alt",
+}
 
 type RegistrationProvider struct {
 	pool     *pgxpool.Pool
@@ -34,21 +45,22 @@ func NewRegistryProvider(db *pgxpool.Pool) *RegistrationProvider {
 }
 
 type registrationState struct {
-	state  int64
-	Name   string
-	Class  int64
-	Level  int64
-	userId string
+	state    int64
+	Name     string
+	Class    int64
+	Level    int64
+	userId   string
+	charType int64
 }
 
 func (r *registrationState) toModel() *model.Character {
 	return &model.Character{
-		Name:      r.Name,
-		Class:     r.Class,
-		Level:     r.Level,
-		AA:        0,
-		IsBot:     false,
-		CreatedBy: r.userId,
+		Name:          r.Name,
+		Class:         r.Class,
+		Level:         r.Level,
+		AA:            0,
+		CharacterType: r.charType,
+		CreatedBy:     r.userId,
 	}
 }
 
@@ -57,6 +69,7 @@ func (r *registrationState) IsComplete() bool {
 }
 
 func (r *RegistrationProvider) MyCharacters(s *discordgo.Session, m *discordgo.MessageCreate) {
+
 	c, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Print(err.Error())
@@ -74,7 +87,11 @@ func (r *RegistrationProvider) MyCharacters(s *discordgo.Session, m *discordgo.M
 	var charStrings []string
 
 	for i, k := range toons {
-		charStrings = append(charStrings, fmt.Sprintf("%d. %s - %d %s %s", i+1, k.Name, k.Level, eq.ClassChoiceMap[k.Class], ""))
+		charStrings = append(charStrings, fmt.Sprintf("%d. %s - %d %s %s", i+1, k.Name, k.Level, eq.ClassChoiceMap[k.Class], charTypeMap[k.CharacterType]))
+	}
+
+	if len(charStrings) == 0 {
+		charStrings = []string{"No characters found."}
 	}
 	sendMessage(s, c, strings.Join(charStrings, "\n"))
 }
@@ -102,7 +119,6 @@ func (r *RegistrationProvider) Step(s *discordgo.Session, m *discordgo.MessageCr
 	switch reg.state {
 	case regStateName:
 		r.nameAck(m)
-
 		err = sendMessage(s, c, fmt.Sprintf("What is your class? Respond with the number that corresponds. \n%s", eq.ClassChoiceString()))
 		if err != nil {
 			log.Print(err.Error())
@@ -125,7 +141,23 @@ func (r *RegistrationProvider) Step(s *discordgo.Session, m *discordgo.MessageCr
 			return
 		}
 
-		if err = sendMessage(s, c, fmt.Sprintf("Is this all correct?\nName: %s\nClass: %s\nLevel: %d\n\n1. Yes\n2. No", reg.Name, eq.ClassChoiceMap[reg.Class], r.registry[m.Author.ID].Level)); err != nil {
+		if err = sendMessage(s, c, "How would you describe this character?\n1. Box\n2. Main\n3. Alt"); err != nil {
+			log.Println(err.Error())
+		}
+	case regStateMata:
+		err = r.metaAck(m)
+		if err != nil {
+			_ = sendMessage(s, c, err.Error())
+			return
+		}
+
+		item := r.registry[m.Author.ID]
+
+		if err = sendMessage(s, c, fmt.Sprintf("Is this all correct?\nName: %s\nClass: %s\nLevel: %d\nType:%s\n\n1. Yes\n2. No",
+			item.Name,
+			eq.ClassChoiceMap[item.Class],
+			item.Level,
+			charTypeMap[item.charType])); err != nil {
 			log.Println(err.Error())
 		}
 	case regStateDone:
@@ -196,7 +228,6 @@ func (r *RegistrationProvider) nameAck(m *discordgo.MessageCreate) {
 }
 
 func (r *RegistrationProvider) classAck(m *discordgo.MessageCreate) error {
-	v := r.registry[m.Author.ID]
 
 	classId, err := strconv.ParseInt(m.Content, 10, 64)
 	if err != nil {
@@ -207,8 +238,27 @@ func (r *RegistrationProvider) classAck(m *discordgo.MessageCreate) error {
 		return errors.New("invalid class")
 	}
 
+	v := r.registry[m.Author.ID]
 	v.Class = classId
 	v.state = regStateLevel
+	r.registry[m.Author.ID] = v
+
+	return nil
+}
+
+func (r *RegistrationProvider) metaAck(m *discordgo.MessageCreate) error {
+	if m.Content != "1" && m.Content != "2" && m.Content != "3" {
+		return errors.New("There was a problem with your input - valid choices are 1, 2 or 3.")
+	}
+
+	typeId, err := strconv.ParseInt(m.Content, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	v := r.registry[m.Author.ID]
+	v.charType = typeId
+	v.state = regStateDone
 	r.registry[m.Author.ID] = v
 
 	return nil
@@ -226,7 +276,7 @@ func (r *RegistrationProvider) levelAck(m *discordgo.MessageCreate) error {
 
 	v := r.registry[m.Author.ID]
 	v.Level = i
-	v.state = regStateDone
+	v.state = regStateMata
 	r.registry[m.Author.ID] = v
 	return nil
 }

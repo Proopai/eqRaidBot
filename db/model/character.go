@@ -9,14 +9,14 @@ import (
 )
 
 type Character struct {
-	Id        int64
-	Name      string
-	Class     int64
-	Level     int64
-	AA        int64
-	IsBot     bool
-	CreatedBy string
-	CreatedAt time.Time
+	Id            int64
+	Name          string
+	Class         int64
+	Level         int64
+	AA            int64
+	CharacterType int64
+	CreatedBy     string
+	CreatedAt     time.Time
 }
 
 func (r *Character) Save(db *pgxpool.Pool) error {
@@ -30,13 +30,13 @@ func (r *Character) Save(db *pgxpool.Pool) error {
 	var row idRow
 
 	conn.QueryRow(context.Background(), `INSERT INTO characters 
-	(name, class, level, aa, is_bot, created_by) 
+	(name, class, level, aa, character_type, created_by) 
 	VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;`,
 		r.Name,
 		r.Class,
 		r.Level,
 		r.AA,
-		r.IsBot,
+		r.CharacterType,
 		r.CreatedBy,
 	).Scan(&row)
 
@@ -54,8 +54,48 @@ func (r *Character) GetByOwner(db *pgxpool.Pool, userId string) ([]Character, er
 	defer conn.Release()
 
 	var toons []Character
-	pgxscan.Select(context.Background(), db, &toons, `SELECT * FROM characters 
-	WHERE created_by = $1 order by level desc;`, userId)
+	q := `SELECT * FROM characters 
+	WHERE created_by = $1 order by level desc;`
+	if err = pgxscan.Select(context.Background(), db, &toons, q, userId); err != nil {
+		return nil, err
+	}
+
+	return toons, nil
+}
+
+func (r *Character) GetAllActive(db *pgxpool.Pool) ([]Character, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
+	var toons []Character
+	// types main and box
+	q := `SELECT * FROM characters where character_type IN(1,2) order by level desc;`
+	if err = pgxscan.Select(context.Background(), db, &toons, q); err != nil {
+		return nil, err
+	}
+
+	return toons, nil
+}
+
+func (r *Character) GetAllNotAttendingEvent(db *pgxpool.Pool, eventId int64) ([]Character, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
+	var toons []Character
+	// types main and box
+	q := `SELECT * FROM characters 
+where character_type IN(1,2) 
+and id NOT IN (select character_id from attedance where event_id = $1)
+order by level desc;`
+	if err = pgxscan.Select(context.Background(), db, &toons, q, eventId); err != nil {
+		return nil, err
+	}
 
 	return toons, nil
 }

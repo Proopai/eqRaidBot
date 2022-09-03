@@ -9,12 +9,14 @@ import (
 type Splitter struct {
 	characters []model.Character
 	usedMap    map[int64]bool
+	debug      bool
 }
 
-func NewSplitter(c []model.Character) *Splitter {
+func NewSplitter(c []model.Character, debug bool) *Splitter {
 	return &Splitter{
 		characters: c,
 		usedMap:    make(map[int64]bool),
+		debug:      debug,
 	}
 }
 
@@ -26,38 +28,55 @@ func NewSplitter(c []model.Character) *Splitter {
 
 // raid should have 1 main tank group - and DPS / healing groups
 // bards should be spread - enchanters paired with healers, and melee clustered together
-func (r *Splitter) Split(groupN int) [][]model.Character {
+func (r *Splitter) Split(groupN int) [][][]model.Character {
 	classGroups := raidWideClassGroups(r.characters)
 	splits := r.getSplits(groupN, classGroups)
 
-	fmt.Println()
-	fmt.Printf("Splitting %d by %d, split size: %d\n", len(r.characters), groupN, len(splits[0]))
-	for i, c := range splits {
-		groups := r.buildGroups(c)
-		fmt.Printf("\nSplit %d\n", i+1)
-		for _, g := range groups {
-			var gString string
-			for _, c := range g {
-				gString += fmt.Sprintf("%s ", ClassChoiceMap[c.Class])
-			}
+	splitGroups := make([][][]model.Character, len(splits))
 
-			fmt.Printf(gString + "\n")
+	if r.debug {
+		fmt.Printf("Splitting %d by %d, split size: %d\n", len(r.characters), groupN, len(splits[0]))
+		for i, c := range splits {
+			groups := r.buildGroups(c)
+			splitGroups[i] = groups
+			fmt.Printf("\nSplit %d\n", i+1)
+			for _, g := range groups {
+				var gString string
+				for _, c := range g {
+					gString += fmt.Sprintf("%s ", ClassChoiceMap[c.Class])
+				}
+
+				fmt.Printf(gString + "\n")
+			}
 		}
 	}
 
-	return splits
+	return splitGroups
 }
 
 func (r *Splitter) buildGroups(raidList []model.Character) [][]model.Character {
 	groups := make([][]model.Character, int(math.Ceil(float64(len(raidList))/6)))
 	classGroups := selectionClassGroups(raidList)
 
-	for k, c := range classGroups {
-		fmt.Printf("%s - %d\n", k, len(c))
+	if r.debug {
+		for k, c := range classGroups {
+			fmt.Printf("%s - %d\n", k, len(c))
+		}
 	}
 
 	for i := 0; i < len(groups)-1; i++ {
 		groups[i] = r.buildGroup(i, classGroups)
+	}
+
+	var leftOver []model.Character
+	for _, k := range raidList {
+		if _, ok := r.usedMap[k.Id]; !ok {
+			leftOver = append(leftOver, k)
+		}
+	}
+
+	if len(leftOver) > 0 {
+		groups[len(groups)-1] = leftOver
 	}
 
 	return groups
@@ -77,10 +96,10 @@ func (r *Splitter) buildGroup(gNum int, classGroups map[string][]model.Character
 	case 0: // tank group
 		t = classTypeTank
 	case 1: // healer group
-		t = classTypeHealer
-	case 3: // melee group
 		t = classTypeMelee
-	case 4: // caster group
+	case 2: // melee group
+		t = classTypeHealer
+	case 3: // caster group
 		t = classTypeCaster
 	default:
 		t = "any"
@@ -98,6 +117,7 @@ func (r *Splitter) addMembersToGroup(classGroups map[string][]model.Character, i
 		list = append(list, classGroups[classTypeMelee]...)
 		list = append(list, classGroups[classTypeCaster]...)
 		list = append(list, classGroups[classTypeHealer]...)
+		list = append(list, classGroups[classTypeEnchanter]...)
 		list = append(list, classGroups[classTypeTank]...)
 	} else {
 		list = classGroups[indicator]
@@ -133,6 +153,7 @@ func (r *Splitter) addMembersToGroup(classGroups map[string][]model.Character, i
 			choices = append(choices, classGroups[classTypeHealer]...)
 			choices = append(choices, classGroups[classTypeMelee]...)
 			choices = append(choices, classGroups[classTypeCaster]...)
+			choices = append(choices, classGroups[classTypeEnchanter]...)
 			choices = append(choices, classGroups[classTypeTank]...)
 
 			for _, k := range choices {

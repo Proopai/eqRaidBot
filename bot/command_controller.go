@@ -4,6 +4,7 @@ import (
 	"eqRaidBot/bot/command"
 	"log"
 	"regexp"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -13,7 +14,6 @@ const (
 	cmdRegister        = "!register"
 	cmdMyCharacters    = "!my-characters"
 	cmdRemoveCharacter = "!remove-character"
-	cmdAttend          = "!attend"
 	cmdWithdraw        = "!withdraw"
 	cmdSplit           = "!split"
 	cmdListEvents      = "!list-events"
@@ -22,25 +22,34 @@ const (
 	cmdHelp            = "!help"
 )
 
-type Commands struct {
+type CommandController struct {
 	registrationProvider *command.RegistrationProvider
 	attedanceProvider    *command.AttendanceProvider
 	eventProvider        *command.EventProvider
 	splitProvider        *command.SplitProvider
+
+	autoAttender *AutoAttender
 }
 
 var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
 
-func NewCommands(db *pgxpool.Pool) *Commands {
-	return &Commands{
+func NewCommandController(db *pgxpool.Pool) *CommandController {
+	return &CommandController{
 		registrationProvider: command.NewRegistryProvider(db),
 		attedanceProvider:    command.NewAttendanceProvider(db),
 		eventProvider:        command.NewEventProvider(db),
 		splitProvider:        command.NewSplitProvider(db),
+		autoAttender:         NewAutoAttender(db),
 	}
 }
 
-func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (r *CommandController) Run(duration time.Duration) {
+	ch := make(chan struct{})
+	go r.autoAttender.Run(ch, duration)
+
+}
+
+func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
@@ -55,8 +64,6 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	case cmdRemoveCharacter:
 		// @TODO
 		break
-	case cmdAttend:
-		r.attedanceProvider.Step(s, m)
 	case cmdSplit:
 		r.splitProvider.Step(s, m)
 	case cmdListEvents:
@@ -66,6 +73,7 @@ func (r *Commands) MessageCreated(s *discordgo.Session, m *discordgo.MessageCrea
 	case cmdHelp:
 		help(s, m)
 	default:
+		// handle pick workflow
 		inProgressRegistration := r.registrationProvider.RegistrationWorkflow(m.Author.ID)
 		if inProgressRegistration != nil && !inProgressRegistration.IsComplete() {
 			r.registrationProvider.Step(s, m)
@@ -98,7 +106,6 @@ Please refer to the list of commands below.
 **!register** 		  - prompts the bot to begin a workflow which allows a user to registers ones characters.
 **!my-characters** 	  - shows the users registered characters.
 **!remove-character** - deletes a character from the list of selectable characters for a given user. (wip)
-**!attend**   		  - prompts the user to confirm their attendance to an event.
 **!withdraw**   	  - allows the user to reneg on a event they signed up for. (wip)
 **!split**    		  - splits registered members into N balanced groups for an event (wip)
 **!list-events**      - lists events.
