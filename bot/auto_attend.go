@@ -3,7 +3,7 @@ package bot
 import (
 	"eqRaidBot/db/model"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/rs/zerolog/log"
+	"log"
 	"time"
 )
 
@@ -23,7 +23,7 @@ func (a *AutoAttender) Run(stop <-chan struct{}, d time.Duration) {
 		select {
 		case <-stop:
 			t.Stop()
-			// shut down
+			log.Println("Stopping auto-attender...")
 			return
 		case <-t.C:
 			err := a.registerMembers()

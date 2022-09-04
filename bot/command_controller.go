@@ -2,12 +2,10 @@ package bot
 
 import (
 	"eqRaidBot/bot/command"
-	"log"
-	"regexp"
-	"time"
-
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"log"
+	"regexp"
 )
 
 const (
@@ -23,30 +21,31 @@ const (
 )
 
 type CommandController struct {
-	registrationProvider *command.RegistrationProvider
-	attedanceProvider    *command.AttendanceProvider
-	eventProvider        *command.EventProvider
-	splitProvider        *command.SplitProvider
-
-	autoAttender *AutoAttender
+	providers map[string]command.Provider
 }
 
 var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
 
 func NewCommandController(db *pgxpool.Pool) *CommandController {
-	return &CommandController{
-		registrationProvider: command.NewRegistryProvider(db),
-		attedanceProvider:    command.NewAttendanceProvider(db),
-		eventProvider:        command.NewEventProvider(db),
-		splitProvider:        command.NewSplitProvider(db),
-		autoAttender:         NewAutoAttender(db),
+	providerMap := make(map[string]command.Provider)
+	providers := []command.Provider{
+		command.NewMyCharactersProvider(db),
+		command.NewRegistrationProvider(db),
+		command.NewListEventsProvider(db),
+		command.NewCreateEventProvider(db),
 	}
-}
 
-func (r *CommandController) Run(duration time.Duration) {
-	ch := make(chan struct{})
-	go r.autoAttender.Run(ch, duration)
+	for _, p := range providers {
+		go p.Cleanup()
+	}
 
+	for _, p := range providers {
+		providerMap[p.Name()] = p
+	}
+
+	return &CommandController{
+		providers: providerMap,
+	}
 }
 
 func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -56,46 +55,23 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 
 	cmd := regMatch.FindString(m.Content)
 
+	// only switch on valid commands
 	switch cmd {
-	case cmdRegister:
-		r.registrationProvider.Step(s, m)
-	case cmdMyCharacters:
-		r.registrationProvider.MyCharacters(s, m)
-	case cmdRemoveCharacter:
-		// @TODO
-		break
-	case cmdSplit:
-		r.splitProvider.Step(s, m)
-	case cmdListEvents:
-		r.eventProvider.ListEvents(s, m)
-	case cmdCreateEvent:
-		r.eventProvider.CreateEventStep(s, m)
+	case cmdRegister, cmdMyCharacters, cmdListEvents, cmdCreateEvent:
+		r.providers[cmd].Handle(s, m)
 	case cmdHelp:
 		help(s, m)
 	default:
-		// handle pick workflow
-		inProgressRegistration := r.registrationProvider.RegistrationWorkflow(m.Author.ID)
-		if inProgressRegistration != nil && !inProgressRegistration.IsComplete() {
-			r.registrationProvider.Step(s, m)
-			return
-		}
+		for _, p := range r.providers {
+			state := p.WorkflowForUser(m.Author.ID)
+			if state == nil {
+				continue
+			}
 
-		inProgressEventCreate := r.eventProvider.EventWorkflow(m.Author.ID)
-		if inProgressEventCreate != nil && !inProgressEventCreate.IsComplete() {
-			r.eventProvider.CreateEventStep(s, m)
-			return
-		}
-
-		inProgressAttend := r.attedanceProvider.AttendWorkflow(m.Author.ID)
-		if inProgressAttend != nil && !inProgressAttend.IsComplete() {
-			r.attedanceProvider.Step(s, m)
-			return
-		}
-
-		inProgressSplit := r.splitProvider.SplitWorkflow(m.Author.ID)
-		if inProgressSplit != nil && !inProgressSplit.IsComplete() {
-			r.splitProvider.Step(s, m)
-			return
+			if !state.IsComplete() {
+				p.Handle(s, m)
+				return
+			}
 		}
 	}
 }
@@ -107,7 +83,7 @@ Please refer to the list of commands below.
 **!my-characters** 	  - shows the users registered characters.
 **!remove-character** - deletes a character from the list of selectable characters for a given user. (wip)
 **!withdraw**   	  - allows the user to reneg on a event they signed up for. (wip)
-**!split**    		  - splits registered members into N balanced groups for an event (wip)
+**!split**    		  - splits registered members into N balanced groups for an event
 **!list-events**      - lists events.
 **!create-event**     - prompts the bot to begin the create event workflow
 **!help**     	      - shows this message

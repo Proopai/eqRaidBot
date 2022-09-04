@@ -5,21 +5,19 @@ import (
 	"eqRaidBot/db/model"
 	"errors"
 	"fmt"
-	"log"
-	"strconv"
-	"strings"
-
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"log"
+	"strconv"
 )
 
 const (
-	regStateName  = 0
-	regStateClass = 1
+	regStateStart = 0
+	regStateName  = 1
+	regStateClass = 2
 	regStateLevel = 3
 	regStateMata  = 4
 	regStateDone  = 5
-	regStateSaved = 6
 
 	typeBox  = 1
 	typeMain = 2
@@ -32,32 +30,20 @@ var charTypeMap = map[int64]string{
 	typeAlt:  "Alt",
 }
 
-type RegistrationProvider struct {
-	pool     *pgxpool.Pool
-	registry map[string]registrationState
-}
-
-func NewRegistryProvider(db *pgxpool.Pool) *RegistrationProvider {
-	return &RegistrationProvider{
-		pool:     db,
-		registry: make(map[string]registrationState),
-	}
-}
-
 type registrationState struct {
 	state    int64
-	Name     string
-	Class    int64
-	Level    int64
+	name     string
+	class    int64
+	level    int64
 	userId   string
 	charType int64
 }
 
 func (r *registrationState) toModel() *model.Character {
 	return &model.Character{
-		Name:          r.Name,
-		Class:         r.Class,
-		Level:         r.Level,
+		Name:          r.name,
+		Class:         r.class,
+		Level:         r.level,
 		AA:            0,
 		CharacterType: r.charType,
 		CreatedBy:     r.userId,
@@ -65,50 +51,60 @@ func (r *registrationState) toModel() *model.Character {
 }
 
 func (r *registrationState) IsComplete() bool {
-	return r.state == regStateSaved && r.Name != "" && r.Class != 0 && r.Level != 0
+	return r.name != "" && r.class != 0 && r.level != 0
 }
 
-func (r *RegistrationProvider) MyCharacters(s *discordgo.Session, m *discordgo.MessageCreate) {
+type RegistrationProvider struct {
+	pool     *pgxpool.Pool
+	registry map[string]registrationState
+	manifest *Manifest
+}
 
+func NewRegistrationProvider(db *pgxpool.Pool) *RegistrationProvider {
+	provider := &RegistrationProvider{
+		pool:     db,
+		registry: make(map[string]registrationState),
+	}
+
+	steps := []Step{
+		provider.start,
+		provider.name,
+		provider.class,
+		provider.level,
+		provider.meta,
+		provider.done,
+	}
+
+	provider.manifest = &Manifest{Steps: steps}
+
+	return provider
+}
+
+func (r *RegistrationProvider) Name() string {
+	return "!register"
+}
+
+func (r *RegistrationProvider) Description() string {
+	return "begins a workflow that allows the user to register their characters"
+}
+
+func (r *RegistrationProvider) Cleanup() {
+}
+
+func (r *RegistrationProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
 	c, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Print(err.Error())
 		return
 	}
 
-	char := model.Character{}
-	toons, err := char.GetByOwner(r.pool, m.Author.ID)
-	if err != nil {
-		log.Println(err.Error())
-		_ = sendMessage(s, c, "There was a problem with finding your characters!")
-		return
-	}
-
-	var charStrings []string
-
-	for i, k := range toons {
-		charStrings = append(charStrings, fmt.Sprintf("%d. %s - %d %s %s", i+1, k.Name, k.Level, eq.ClassChoiceMap[k.Class], charTypeMap[k.CharacterType]))
-	}
-
-	if len(charStrings) == 0 {
-		charStrings = []string{"No characters found."}
-	}
-	sendMessage(s, c, strings.Join(charStrings, "\n"))
-}
-
-func (r *RegistrationProvider) Step(s *discordgo.Session, m *discordgo.MessageCreate) {
-	c, err := s.UserChannelCreate(m.Author.ID)
-	if err != nil {
-		log.Print(err.Error())
-		return
-	}
-
-	if actioned := r.init(c, s, m); actioned {
+	action, _ := processCommand(r.manifest, 0, m, s, c.ID)
+	if action == actionSent {
 		return
 	}
 
 	if _, ok := r.registry[m.Author.ID]; !ok {
-		err = sendMessage(s, c, "Please restart the registration process by typing **!register** to the bot in the main channel")
+		err = sendMessage(s, c.ID, "Please restart the registration process by typing **!register** to the bot in the main channel")
 		if err != nil {
 			return
 		}
@@ -116,83 +112,13 @@ func (r *RegistrationProvider) Step(s *discordgo.Session, m *discordgo.MessageCr
 
 	reg := r.registry[m.Author.ID]
 
-	switch reg.state {
-	case regStateName:
-		r.nameAck(m)
-		err = sendMessage(s, c, fmt.Sprintf("What is your class? Respond with the number that corresponds. \n%s", eq.ClassChoiceString()))
-		if err != nil {
-			log.Print(err.Error())
-		}
-	case regStateClass:
-		err = r.classAck(m)
-		if err != nil {
-			_ = sendMessage(s, c, "There was an error with your input - please try again")
-			return
-		}
-
-		if err = sendMessage(s, c, fmt.Sprintf("What is your level?\n")); err != nil {
-			log.Println(err.Error())
-		}
-
-	case regStateLevel:
-		err = r.levelAck(m)
-		if err != nil {
-			_ = sendMessage(s, c, fmt.Sprintf("There was an error with your input - please try again, the current max level is %d", eq.MaxLevel))
-			return
-		}
-
-		if err = sendMessage(s, c, "How would you describe this character?\n1. Box\n2. Main\n3. Alt"); err != nil {
-			log.Println(err.Error())
-		}
-	case regStateMata:
-		err = r.metaAck(m)
-		if err != nil {
-			_ = sendMessage(s, c, err.Error())
-			return
-		}
-
-		item := r.registry[m.Author.ID]
-
-		if err = sendMessage(s, c, fmt.Sprintf("Is this all correct?\nName: %s\nClass: %s\nLevel: %d\nType:%s\n\n1. Yes\n2. No",
-			item.Name,
-			eq.ClassChoiceMap[item.Class],
-			item.Level,
-			charTypeMap[item.charType])); err != nil {
-			log.Println(err.Error())
-		}
-	case regStateDone:
-		if m.Content == "1" {
-
-			dat := r.registry[m.Author.ID]
-			err := dat.toModel().Save(r.pool)
-
-			if err != nil {
-				log.Println(err.Error())
-				_ = sendMessage(s, c, "There was an error with your input - please try again")
-				return
-			}
-
-			if err = sendMessage(s, c, "Saved your information.  You do not need to register this character again."); err != nil {
-				log.Println(err.Error())
-			}
-
-			r.reset(m)
-		} else if m.Content == "2" {
-			if err = sendMessage(s, c, "Resetting all your information"); err != nil {
-				log.Println(err.Error())
-			}
-
-			r.reset(m)
-			r.init(c, s, m)
-		} else {
-			_ = sendMessage(s, c, "There was an error with your input - please try again")
-		}
-
+	_, err = processCommand(r.manifest, reg.state, m, s, c.ID)
+	if err != nil {
+		log.Println(err.Error())
 	}
-
 }
 
-func (r *RegistrationProvider) RegistrationWorkflow(userId string) *registrationState {
+func (r *RegistrationProvider) WorkflowForUser(userId string) State {
 	if v, ok := r.registry[userId]; ok {
 		return &v
 	} else {
@@ -200,60 +126,74 @@ func (r *RegistrationProvider) RegistrationWorkflow(userId string) *registration
 	}
 }
 
-func (r *RegistrationProvider) init(c *discordgo.Channel, s *discordgo.Session, m *discordgo.MessageCreate) bool {
+func (r *RegistrationProvider) start(m *discordgo.MessageCreate) (string, error) {
 	// check the database to see if they have previously registered
 	if _, ok := r.registry[m.Author.ID]; !ok {
 		r.registry[m.Author.ID] = registrationState{
 			state:  regStateName,
 			userId: m.Author.ID,
 		}
-		if err := sendMessage(s, c, fmt.Sprintf("Hello %s, what is your characters name?", m.Author.Username)); err != nil {
-			return false
-		}
-		return true
+
+		return fmt.Sprintf("Hello %s, what is your characters name?", m.Author.Username), nil
 	}
 
-	return false
+	return "", nil
 }
 
-func (r *RegistrationProvider) reset(m *discordgo.MessageCreate) {
-	delete(r.registry, m.Author.ID)
-}
-
-func (r *RegistrationProvider) nameAck(m *discordgo.MessageCreate) {
+func (r *RegistrationProvider) name(m *discordgo.MessageCreate) (string, error) {
 	v := r.registry[m.Author.ID]
-	v.Name = m.Content
+	v.name = m.Content
 	v.state = regStateClass
 	r.registry[m.Author.ID] = v
+
+	return fmt.Sprintf("What is your class? Respond with the number that corresponds. \n%s", eq.ClassChoiceString()), nil
 }
 
-func (r *RegistrationProvider) classAck(m *discordgo.MessageCreate) error {
-
+func (r *RegistrationProvider) class(m *discordgo.MessageCreate) (string, error) {
 	classId, err := strconv.ParseInt(m.Content, 10, 64)
 	if err != nil {
-		return err
+		log.Println(err.Error())
+		return "", errors.New("there was an error with your input - please try again")
 	}
 
 	if _, ok := eq.ClassChoiceMap[classId]; !ok {
-		return errors.New("invalid class")
+		return "", errors.New("invalid class")
 	}
 
 	v := r.registry[m.Author.ID]
-	v.Class = classId
+	v.class = classId
 	v.state = regStateLevel
 	r.registry[m.Author.ID] = v
 
-	return nil
+	return fmt.Sprintf("What is your level?\n"), nil
 }
 
-func (r *RegistrationProvider) metaAck(m *discordgo.MessageCreate) error {
+func (r *RegistrationProvider) level(m *discordgo.MessageCreate) (string, error) {
+	i, err := strconv.ParseInt(m.Content, 10, 64)
+	if err != nil {
+		return "", errors.New("there was an error with your input - please try again")
+	}
+
+	if i > eq.MaxLevel || i < 0 {
+		return "", errors.New(fmt.Sprintf("a characters level must be between 0 and %d", eq.MaxLevel))
+	}
+
+	v := r.registry[m.Author.ID]
+	v.level = i
+	v.state = regStateMata
+	r.registry[m.Author.ID] = v
+
+	return "How would you describe this character?\n1. Box\n2. Main\n3. Alt", nil
+}
+
+func (r *RegistrationProvider) meta(m *discordgo.MessageCreate) (string, error) {
 	if m.Content != "1" && m.Content != "2" && m.Content != "3" {
-		return errors.New("There was a problem with your input - valid choices are 1, 2 or 3.")
+		return "", errors.New("there was a problem with your input - valid choices are 1, 2 or 3")
 	}
 
 	typeId, err := strconv.ParseInt(m.Content, 10, 64)
 	if err != nil {
-		return err
+		return "", errors.New("there was a problem parsing your input")
 	}
 
 	v := r.registry[m.Author.ID]
@@ -261,22 +201,34 @@ func (r *RegistrationProvider) metaAck(m *discordgo.MessageCreate) error {
 	v.state = regStateDone
 	r.registry[m.Author.ID] = v
 
-	return nil
+	return fmt.Sprintf("Is this all correct?\nName: %s\nClass: %s\nLevel: %d\nType:%s\n\n1. Yes\n2. No",
+		v.name,
+		eq.ClassChoiceMap[v.class],
+		v.level,
+		charTypeMap[v.charType]), nil
 }
 
-func (r *RegistrationProvider) levelAck(m *discordgo.MessageCreate) error {
-	i, err := strconv.ParseInt(m.Content, 10, 64)
-	if err != nil {
-		return err
-	}
+func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) {
+	switch m.Content {
+	case "1":
+		dat := r.registry[m.Author.ID]
+		err := dat.toModel().Save(r.pool)
 
-	if i > eq.MaxLevel {
-		return errors.New("level is too high")
-	}
+		if err != nil {
+			return "", errors.New("there was an error saving this information. Please try again, if the problem persists reach out to your administrator")
+		}
 
-	v := r.registry[m.Author.ID]
-	v.Level = i
-	v.state = regStateMata
-	r.registry[m.Author.ID] = v
-	return nil
+		r.reset(m)
+
+		return "Saved your information.  You do not need to register this character again.", nil
+	case "2":
+		r.reset(m)
+		return "Resetting all your information", nil
+	default:
+		return "", errors.New("there was an error with your input - please try again")
+	}
+}
+
+func (r *RegistrationProvider) reset(m *discordgo.MessageCreate) {
+	delete(r.registry, m.Author.ID)
 }
