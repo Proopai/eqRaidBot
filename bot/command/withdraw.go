@@ -10,19 +10,20 @@ import (
 	"strings"
 )
 
-type MyCharactersProvider struct {
+type WithdrawProvider struct {
 	manifest *Manifest
 	db       *pgxpool.Pool
 }
 
-func NewMyCharactersProvider(db *pgxpool.Pool) *MyCharactersProvider {
-	provider := &MyCharactersProvider{
+func NewWithdrawProvider(db *pgxpool.Pool) *WithdrawProvider {
+	provider := &WithdrawProvider{
 		manifest: nil,
 		db:       db,
 	}
 
 	steps := []Step{
-		provider.list,
+		provider.start,
+		provider.eventOrNext,
 	}
 
 	provider.manifest = &Manifest{Steps: steps}
@@ -30,28 +31,36 @@ func NewMyCharactersProvider(db *pgxpool.Pool) *MyCharactersProvider {
 	return provider
 }
 
-func (p *MyCharactersProvider) Name() string {
-	return MyCharacters
+func (p *WithdrawProvider) Name() string {
+	return Withdraw
 }
 
-func (p *MyCharactersProvider) Description() string {
-	return "lists all the currently registered characters for a user"
+func (p *WithdrawProvider) Description() string {
+	return "allows the user to opt out of an event"
 }
 
 // we have no state to clean up with this command
-func (p *MyCharactersProvider) Cleanup() {
+func (p *WithdrawProvider) Cleanup() {
 	return
 }
 
-func (p *MyCharactersProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
-	genericSimpleHandler(s, m, p.manifest)
+func (p *WithdrawProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
+	c, err := s.UserChannelCreate(m.Author.ID)
+	if err != nil {
+		log.Print(err.Error())
+		return
+	}
+
+	if _, err := processCommand(p.manifest, 0, m, s, c.ID); err != nil {
+		log.Println(err.Error())
+	}
 }
 
-func (p *MyCharactersProvider) WorkflowForUser(userId string) State {
+func (p *WithdrawProvider) WorkflowForUser(userId string) State {
 	return nil
 }
 
-func (p *MyCharactersProvider) list(m *discordgo.MessageCreate) (string, error) {
+func (p *WithdrawProvider) start(m *discordgo.MessageCreate) (string, error) {
 	char := model.Character{}
 	toons, err := char.GetByOwner(p.db, m.Author.ID)
 	if err != nil {
@@ -70,4 +79,8 @@ func (p *MyCharactersProvider) list(m *discordgo.MessageCreate) (string, error) 
 	}
 
 	return strings.Join(charStrings, "\n"), nil
+}
+
+func (p *WithdrawProvider) eventOrNext(m *discordgo.MessageCreate) (string, error) {
+	return "", nil
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"log"
 	"strings"
 	"time"
 )
@@ -28,7 +27,7 @@ func NewListEventsProvider(db *pgxpool.Pool) *ListEventProvider {
 }
 
 func (r *ListEventProvider) Name() string {
-	return "!event-list"
+	return ListEvents
 }
 
 func (r *ListEventProvider) Description() string {
@@ -43,9 +42,7 @@ func (r *ListEventProvider) WorkflowForUser(userId string) State {
 }
 
 func (r *ListEventProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if _, err := processCommand(r.manifest, 0, m, s, m.ChannelID); err != nil {
-		log.Println(err.Error())
-	}
+	genericSimpleHandler(s, m, r.manifest)
 }
 
 func (r *ListEventProvider) list(m *discordgo.MessageCreate) (string, error) {

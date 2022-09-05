@@ -11,18 +11,6 @@ import (
 	"strings"
 )
 
-const (
-	cmdRegister        = "!register"
-	cmdMyCharacters    = "!my-characters"
-	cmdRemoveCharacter = "!remove-character"
-	cmdWithdraw        = "!withdraw"
-	cmdSplit           = "!split"
-	cmdListEvents      = "!event-list"
-	cmdCreateEvent     = "!event-create"
-	cmdRoster          = "!roster"
-	cmdHelp            = "!help"
-)
-
 type CommandController struct {
 	providers map[string]command.Provider
 }
@@ -38,6 +26,7 @@ func NewCommandController(db *pgxpool.Pool) *CommandController {
 		command.NewCreateEventProvider(db),
 		command.NewSplitProvider(db),
 		command.NewRosterProvider(db),
+		command.NewWithdrawProvider(db),
 	}
 
 	for _, p := range providers {
@@ -62,9 +51,9 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 
 	// only switch on valid commands
 	switch cmd {
-	case cmdRegister, cmdMyCharacters, cmdListEvents, cmdCreateEvent, cmdSplit, cmdRoster:
+	case command.Register, command.MyCharacters, command.ListEvents, command.CreateEvent, command.Split, command.Roster, command.Withdraw:
 		r.providers[cmd].Handle(s, m)
-	case cmdHelp:
+	case command.Help:
 		r.help(s, m)
 	default:
 		for _, p := range r.providers {

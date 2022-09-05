@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -19,26 +18,30 @@ const (
 	rosterStateDone  = 2
 )
 
-type RosterState struct {
+type rosterState struct {
 	eventId int64
 	state   int64
 	userId  string
 }
 
-func (r *RosterState) IsComplete() bool {
+func (r *rosterState) IsComplete() bool {
 	return r.state == rosterStateDone && r.eventId != 0
+}
+
+func (r *rosterState) Step() int64 {
+	return r.state
 }
 
 type RosterProvider struct {
 	pool     *pgxpool.Pool
-	registry map[string]RosterState
+	registry StateRegistry
 	manifest *Manifest
 	eventReg map[string]map[int]model.Event
 }
 
 func NewRosterProvider(db *pgxpool.Pool) *RosterProvider {
 	provider := &RosterProvider{
-		registry: make(map[string]RosterState),
+		registry: make(StateRegistry),
 		eventReg: make(map[string]map[int]model.Event),
 		pool:     db,
 	}
@@ -54,7 +57,7 @@ func NewRosterProvider(db *pgxpool.Pool) *RosterProvider {
 }
 
 func (r *RosterProvider) Name() string {
-	return "!roster"
+	return Roster
 }
 
 func (r *RosterProvider) Description() string {
@@ -66,37 +69,14 @@ func (r *RosterProvider) Cleanup() {
 
 func (r *RosterProvider) WorkflowForUser(userId string) State {
 	if v, ok := r.registry[userId]; ok {
-		return &v
+		return v
 	} else {
 		return nil
 	}
 }
 
 func (r *RosterProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
-	c, err := s.UserChannelCreate(m.Author.ID)
-	if err != nil {
-		log.Print(err.Error())
-		return
-	}
-
-	action, _ := processCommand(r.manifest, 0, m, s, c.ID)
-	if action == actionSent {
-		return
-	}
-
-	if _, ok := r.registry[m.Author.ID]; !ok {
-		err = sendMessage(s, c.ID, "Please restart the roster by typing **!roster**")
-		if err != nil {
-			return
-		}
-	}
-
-	reg := r.registry[m.Author.ID]
-
-	_, err = processCommand(r.manifest, reg.state, m, s, c.ID)
-	if err != nil {
-		log.Println(err.Error())
-	}
+	genericStepwiseHandler(s, m, r.manifest, r.registry)
 }
 
 func (r *RosterProvider) start(m *discordgo.MessageCreate) (string, error) {
@@ -111,7 +91,7 @@ func (r *RosterProvider) start(m *discordgo.MessageCreate) (string, error) {
 			return "", errors.New("there are no events to inspect")
 		}
 
-		r.registry[m.Author.ID] = RosterState{
+		r.registry[m.Author.ID] = &rosterState{
 			state:  rosterStatePrint,
 			userId: m.Author.ID,
 		}
@@ -140,17 +120,17 @@ func (r *RosterProvider) done(m *discordgo.MessageCreate) (string, error) {
 
 	for k, v := range r.eventReg[m.Author.ID] {
 		if k == i {
-			vs.eventId = v.Id
+			vs.(*rosterState).eventId = v.Id
 			break
 		}
 	}
 
-	if vs.eventId == 0 {
+	if vs.(*rosterState).eventId == 0 {
 		return "", errors.New("invalid event selection")
 	}
 
 	c := model.Character{}
-	toons, err := c.GetAllAttendingEvent(r.pool, vs.eventId)
+	toons, err := c.GetAllAttendingEvent(r.pool, vs.(*rosterState).eventId)
 	if err != nil {
 		return "", ErrorInternalError
 	}

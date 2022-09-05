@@ -5,7 +5,6 @@ import (
 	"eqRaidBot/db/model"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -21,19 +20,23 @@ const (
 	splitStateDone  = 3
 )
 
-type SplitState struct {
+type splitState struct {
 	eventId int64
 	state   int64
 	userId  string
 }
 
-func (r *SplitState) IsComplete() bool {
+func (r *splitState) IsComplete() bool {
 	return r.state == splitStateDone && r.eventId != 0
+}
+
+func (r *splitState) Step() int64 {
+	return r.state
 }
 
 type SplitProvider struct {
 	pool     *pgxpool.Pool
-	registry map[string]SplitState
+	registry StateRegistry
 	eventReg map[string]map[int]model.Event
 	manifest *Manifest
 }
@@ -42,7 +45,7 @@ func NewSplitProvider(db *pgxpool.Pool) *SplitProvider {
 	provider := &SplitProvider{
 		pool:     db,
 		eventReg: make(map[string]map[int]model.Event),
-		registry: make(map[string]SplitState),
+		registry: make(StateRegistry),
 	}
 
 	steps := []Step{
@@ -57,7 +60,7 @@ func NewSplitProvider(db *pgxpool.Pool) *SplitProvider {
 }
 
 func (r *SplitProvider) Name() string {
-	return "!split"
+	return Split
 }
 
 func (r *SplitProvider) Description() string {
@@ -69,38 +72,14 @@ func (r *SplitProvider) Cleanup() {
 
 func (r *SplitProvider) WorkflowForUser(userId string) State {
 	if v, ok := r.registry[userId]; ok {
-		return &v
+		return v
 	} else {
 		return nil
 	}
 }
 
 func (r *SplitProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
-	c, err := s.UserChannelCreate(m.Author.ID)
-	if err != nil {
-		log.Print(err.Error())
-		return
-	}
-
-	action, _ := processCommand(r.manifest, 0, m, s, c.ID)
-	if action == actionSent {
-		return
-	}
-
-	if _, ok := r.registry[m.Author.ID]; !ok {
-		err = sendMessage(s, c.ID, "Please restart the split process by typing **!split**")
-		if err != nil {
-			return
-		}
-	}
-
-	reg := r.registry[m.Author.ID]
-
-	_, err = processCommand(r.manifest, reg.state, m, s, c.ID)
-	if err != nil {
-		log.Println(err.Error())
-	}
-
+	genericStepwiseHandler(s, m, r.manifest, r.registry)
 }
 
 func (r *SplitProvider) start(m *discordgo.MessageCreate) (string, error) {
@@ -116,7 +95,7 @@ func (r *SplitProvider) start(m *discordgo.MessageCreate) (string, error) {
 			return "", errors.New("there are no events to split")
 		}
 
-		r.registry[m.Author.ID] = SplitState{
+		r.registry[m.Author.ID] = &splitState{
 			state:  splitStateEvent,
 			userId: m.Author.ID,
 		}
@@ -145,15 +124,15 @@ func (r *SplitProvider) event(m *discordgo.MessageCreate) (string, error) {
 
 	for k, v := range r.eventReg[m.Author.ID] {
 		if k == i {
-			vs.eventId = v.Id
+			vs.(*splitState).eventId = v.Id
 			break
 		}
 	}
 
-	if vs.eventId == 0 {
+	if vs.(*splitState).eventId == 0 {
 		return "", errors.New("invalid event selection")
 	} else {
-		vs.state = splitStateSplit
+		vs.(*splitState).state = splitStateSplit
 		r.registry[m.Author.ID] = vs
 	}
 
@@ -173,7 +152,7 @@ func (r *SplitProvider) split(m *discordgo.MessageCreate) (string, error) {
 
 	a := model.Attendance{}
 
-	attendees, err := a.GetAttendees(r.pool, r.registry[m.Author.ID].eventId)
+	attendees, err := a.GetAttendees(r.pool, r.registry[m.Author.ID].(*splitState).eventId)
 	if err != nil {
 		return "", ErrorInternalError
 	}

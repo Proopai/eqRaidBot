@@ -11,6 +11,16 @@ const (
 	actionError = commandAction(1)
 	actionSent  = commandAction(2)
 	actionSkip  = commandAction(3)
+
+	Register      = "!register"
+	MyCharacters  = "!my-characters"
+	EditCharacter = "!edit-characters"
+	Withdraw      = "!withdraw"
+	Split         = "!split"
+	ListEvents    = "!event-list"
+	CreateEvent   = "!event-create"
+	Roster        = "!roster"
+	Help          = "!help"
 )
 
 type Provider interface {
@@ -21,8 +31,11 @@ type Provider interface {
 	Cleanup()
 }
 
+type StateRegistry map[string]State
+
 type State interface {
 	IsComplete() bool
+	Step() int64
 }
 
 type Manifest struct {
@@ -38,6 +51,45 @@ func actionCommandManifest(manifest *Manifest, state int64, m *discordgo.Message
 	}
 
 	return res, nil
+}
+
+func genericSimpleHandler(s *discordgo.Session, m *discordgo.MessageCreate, manifest *Manifest) {
+	c, err := s.UserChannelCreate(m.Author.ID)
+	if err != nil {
+		log.Print(err.Error())
+		return
+	}
+
+	if _, err := processCommand(manifest, 0, m, s, c.ID); err != nil {
+		log.Println(err.Error())
+	}
+}
+
+func genericStepwiseHandler(s *discordgo.Session, m *discordgo.MessageCreate, manifest *Manifest, registry StateRegistry) {
+	c, err := s.UserChannelCreate(m.Author.ID)
+	if err != nil {
+		log.Print(err.Error())
+		return
+	}
+
+	action, _ := processCommand(manifest, 0, m, s, c.ID)
+	if action == actionSent {
+		return
+	}
+
+	if _, ok := registry[m.Author.ID]; !ok {
+		err = sendMessage(s, c.ID, "Please restart the split process by typing **!split**")
+		if err != nil {
+			return
+		}
+	}
+
+	reg := registry[m.Author.ID]
+
+	_, err = processCommand(manifest, reg.Step(), m, s, c.ID)
+	if err != nil {
+		log.Println(err.Error())
+	}
 }
 
 func processCommand(manifest *Manifest, state int64, m *discordgo.MessageCreate, s *discordgo.Session, cId string) (commandAction, error) {

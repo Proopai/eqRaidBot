@@ -55,16 +55,20 @@ func (r *registrationState) IsComplete() bool {
 	return r.state == regStateSaved
 }
 
+func (r *registrationState) Step() int64 {
+	return r.state
+}
+
 type RegistrationProvider struct {
 	pool     *pgxpool.Pool
-	registry map[string]registrationState
+	registry StateRegistry
 	manifest *Manifest
 }
 
 func NewRegistrationProvider(db *pgxpool.Pool) *RegistrationProvider {
 	provider := &RegistrationProvider{
 		pool:     db,
-		registry: make(map[string]registrationState),
+		registry: make(StateRegistry),
 	}
 
 	steps := []Step{
@@ -82,7 +86,7 @@ func NewRegistrationProvider(db *pgxpool.Pool) *RegistrationProvider {
 }
 
 func (r *RegistrationProvider) Name() string {
-	return "!register"
+	return Register
 }
 
 func (r *RegistrationProvider) Description() string {
@@ -93,35 +97,12 @@ func (r *RegistrationProvider) Cleanup() {
 }
 
 func (r *RegistrationProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
-	c, err := s.UserChannelCreate(m.Author.ID)
-	if err != nil {
-		log.Print(err.Error())
-		return
-	}
-
-	action, _ := processCommand(r.manifest, 0, m, s, c.ID)
-	if action == actionSent {
-		return
-	}
-
-	if _, ok := r.registry[m.Author.ID]; !ok {
-		err = sendMessage(s, c.ID, "Please restart the registration process by typing **!register**")
-		if err != nil {
-			return
-		}
-	}
-
-	reg := r.registry[m.Author.ID]
-
-	_, err = processCommand(r.manifest, reg.state, m, s, c.ID)
-	if err != nil {
-		log.Println(err.Error())
-	}
+	genericStepwiseHandler(s, m, r.manifest, r.registry)
 }
 
 func (r *RegistrationProvider) WorkflowForUser(userId string) State {
 	if v, ok := r.registry[userId]; ok {
-		return &v
+		return v
 	} else {
 		return nil
 	}
@@ -130,7 +111,7 @@ func (r *RegistrationProvider) WorkflowForUser(userId string) State {
 func (r *RegistrationProvider) start(m *discordgo.MessageCreate) (string, error) {
 	// check the database to see if they have previously registered
 	if _, ok := r.registry[m.Author.ID]; !ok {
-		r.registry[m.Author.ID] = registrationState{
+		r.registry[m.Author.ID] = &registrationState{
 			state:  regStateName,
 			userId: m.Author.ID,
 		}
@@ -142,7 +123,7 @@ func (r *RegistrationProvider) start(m *discordgo.MessageCreate) (string, error)
 }
 
 func (r *RegistrationProvider) name(m *discordgo.MessageCreate) (string, error) {
-	v := r.registry[m.Author.ID]
+	v := r.registry[m.Author.ID].(*registrationState)
 	v.name = m.Content
 	v.state = regStateClass
 	r.registry[m.Author.ID] = v
@@ -161,7 +142,7 @@ func (r *RegistrationProvider) class(m *discordgo.MessageCreate) (string, error)
 		return "", errors.New("invalid class choice, please try again and pick the number next the corresponding class")
 	}
 
-	v := r.registry[m.Author.ID]
+	v := r.registry[m.Author.ID].(*registrationState)
 	v.class = classId
 	v.state = regStateLevel
 	r.registry[m.Author.ID] = v
@@ -179,7 +160,7 @@ func (r *RegistrationProvider) level(m *discordgo.MessageCreate) (string, error)
 		return "", errors.New(fmt.Sprintf("a characters level must be between 0 and %d", eq.MaxLevel))
 	}
 
-	v := r.registry[m.Author.ID]
+	v := r.registry[m.Author.ID].(*registrationState)
 	v.level = i
 	v.state = regStateMata
 	r.registry[m.Author.ID] = v
@@ -197,7 +178,7 @@ func (r *RegistrationProvider) meta(m *discordgo.MessageCreate) (string, error) 
 		return "", ErrorInvalidInput
 	}
 
-	v := r.registry[m.Author.ID]
+	v := r.registry[m.Author.ID].(*registrationState)
 	v.charType = typeId
 	v.state = regStateDone
 	r.registry[m.Author.ID] = v
@@ -212,7 +193,7 @@ func (r *RegistrationProvider) meta(m *discordgo.MessageCreate) (string, error) 
 func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) {
 	switch m.Content {
 	case "1":
-		dat := r.registry[m.Author.ID]
+		dat := r.registry[m.Author.ID].(*registrationState)
 		err := dat.toModel().Save(r.pool)
 
 		if err != nil {

@@ -22,7 +22,7 @@ const (
 
 type CreateEventProvider struct {
 	pool     *pgxpool.Pool
-	registry map[string]eventState
+	registry StateRegistry
 	manifest *Manifest
 }
 
@@ -39,6 +39,10 @@ func (r *eventState) IsComplete() bool {
 	return r.state == eventStateSaved
 }
 
+func (r *eventState) Step() int64 {
+	return r.state
+}
+
 func (r *eventState) toModel() *model.Event {
 	return &model.Event{
 		Title:        r.name,
@@ -52,7 +56,7 @@ func (r *eventState) toModel() *model.Event {
 func NewCreateEventProvider(db *pgxpool.Pool) *CreateEventProvider {
 	provider := &CreateEventProvider{
 		pool:     db,
-		registry: make(map[string]eventState),
+		registry: make(StateRegistry),
 	}
 
 	steps := []Step{
@@ -70,7 +74,7 @@ func NewCreateEventProvider(db *pgxpool.Pool) *CreateEventProvider {
 }
 
 func (r *CreateEventProvider) Name() string {
-	return "!event-create"
+	return CreateEvent
 }
 
 func (r *CreateEventProvider) Description() string {
@@ -82,42 +86,19 @@ func (r *CreateEventProvider) Cleanup() {
 
 func (r *CreateEventProvider) WorkflowForUser(userId string) State {
 	if v, ok := r.registry[userId]; ok {
-		return &v
+		return v
 	} else {
 		return nil
 	}
 }
 
 func (r *CreateEventProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
-	c, err := s.UserChannelCreate(m.Author.ID)
-	if err != nil {
-		log.Print(err.Error())
-		return
-	}
-
-	action, err := processCommand(r.manifest, 0, m, s, c.ID)
-	if action == actionSent {
-		return
-	}
-
-	if _, ok := r.registry[m.Author.ID]; !ok {
-		err = sendMessage(s, c.ID, "Please restart the event creation process by typing **!create-event**")
-		if err != nil {
-			return
-		}
-	}
-
-	reg := r.registry[m.Author.ID]
-
-	_, err = processCommand(r.manifest, reg.state, m, s, c.ID)
-	if err != nil {
-		log.Println(err.Error())
-	}
+	genericStepwiseHandler(s, m, r.manifest, r.registry)
 }
 
 func (r *CreateEventProvider) start(m *discordgo.MessageCreate) (string, error) {
 	if _, ok := r.registry[m.Author.ID]; !ok {
-		r.registry[m.Author.ID] = eventState{
+		r.registry[m.Author.ID] = &eventState{
 			state:  eventStateName,
 			userId: m.Author.ID,
 		}
@@ -128,8 +109,8 @@ func (r *CreateEventProvider) start(m *discordgo.MessageCreate) (string, error) 
 
 func (r *CreateEventProvider) name(m *discordgo.MessageCreate) (string, error) {
 	v := r.registry[m.Author.ID]
-	v.name = m.Content
-	v.state = eventStateDesc
+	v.(*eventState).name = m.Content
+	v.(*eventState).state = eventStateDesc
 	r.registry[m.Author.ID] = v
 
 	return "Enter a description", nil
@@ -137,8 +118,8 @@ func (r *CreateEventProvider) name(m *discordgo.MessageCreate) (string, error) {
 
 func (r *CreateEventProvider) description(m *discordgo.MessageCreate) (string, error) {
 	v := r.registry[m.Author.ID]
-	v.description = m.Content
-	v.state = eventStateTime
+	v.(*eventState).description = m.Content
+	v.(*eventState).state = eventStateTime
 	r.registry[m.Author.ID] = v
 
 	return `Enter a time for the event.  
@@ -152,8 +133,8 @@ func (r *CreateEventProvider) time(m *discordgo.MessageCreate) (string, error) {
 	if err != nil {
 		return "", ErrorInvalidInput
 	}
-	v.time = t.UTC()
-	v.state = eventStateRepeating
+	v.(*eventState).time = t.UTC()
+	v.(*eventState).state = eventStateRepeating
 	r.registry[m.Author.ID] = v
 
 	return `Does the event repeat?. (1 or 2) 
@@ -166,14 +147,14 @@ func (r *CreateEventProvider) repeating(m *discordgo.MessageCreate) (string, err
 
 	switch m.Message.Content {
 	case "1":
-		v.repeats = true
+		v.(*eventState).repeats = true
 	case "2":
-		v.repeats = false
+		v.(*eventState).repeats = false
 	default:
 		return "", ErrorInvalidInput
 	}
 
-	v.state = eventStateDone
+	v.(*eventState).state = eventStateDone
 	r.registry[m.Author.ID] = v
 
 	msg := `Does this all look correct?. (1 or 2) 
@@ -185,13 +166,17 @@ Repeating: %t
 1. Yes
 2. No`
 
-	return fmt.Sprintf(msg, v.name, v.description, v.time.String(), v.repeats), nil
+	return fmt.Sprintf(msg,
+		v.(*eventState).name,
+		v.(*eventState).description,
+		v.(*eventState).time.String(),
+		v.(*eventState).repeats), nil
 
 }
 
 func (r *CreateEventProvider) done(m *discordgo.MessageCreate) (string, error) {
 	if m.Content == "1" {
-		dat := r.registry[m.Author.ID]
+		dat := r.registry[m.Author.ID].(*eventState)
 		err := dat.toModel().Save(r.pool)
 		if err != nil {
 			log.Printf(err.Error())
