@@ -2,6 +2,7 @@ package bot
 
 import (
 	"eqRaidBot/bot/command"
+	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"log"
@@ -33,6 +34,7 @@ func NewCommandController(db *pgxpool.Pool) *CommandController {
 		command.NewRegistrationProvider(db),
 		command.NewListEventsProvider(db),
 		command.NewCreateEventProvider(db),
+		command.NewSplitProvider(db),
 	}
 
 	for _, p := range providers {
@@ -57,10 +59,10 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 
 	// only switch on valid commands
 	switch cmd {
-	case cmdRegister, cmdMyCharacters, cmdListEvents, cmdCreateEvent:
+	case cmdRegister, cmdMyCharacters, cmdListEvents, cmdCreateEvent, cmdSplit:
 		r.providers[cmd].Handle(s, m)
 	case cmdHelp:
-		help(s, m)
+		r.help(s, m)
 	default:
 		for _, p := range r.providers {
 			state := p.WorkflowForUser(m.Author.ID)
@@ -76,9 +78,13 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 	}
 }
 
-var helpMessage = `Eq Raid Bot is a discord based EverQuest raid helper. 
+var helpMessage = `Eq Raid Bot is a discord based EverQuest raid helper. Its primary goal is to track and generate raid splits.
 Please refer to the list of commands below. 
+--------------------------------------------------------------
+%s
+`
 
+/*
 **!register** 		  - prompts the bot to begin a workflow which allows a user to registers ones characters.
 **!my-characters** 	  - shows the users registered characters.
 **!remove-character** - deletes a character from the list of selectable characters for a given user. (wip)
@@ -88,8 +94,26 @@ Please refer to the list of commands below.
 **!create-event**     - prompts the bot to begin the create event workflow
 **!help**     	      - shows this message
 `
+*/
 
-func help(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (r *CommandController) help(s *discordgo.Session, m *discordgo.MessageCreate) {
+	var (
+		names   []string
+		longest int
+	)
+	for k := range r.providers {
+		if len(k) > longest {
+			longest = len(k)
+		}
+		names = append(names, k)
+	}
+
+	cmdListString := ""
+
+	for _, p := range r.providers {
+		subStr := fmt.Sprintf("**%s**	-", p.Name(), p.Description())
+		cmdListString = fmt.Sprintf("%s", cmdListString)
+	}
 	_, err := s.ChannelMessageSend(m.ChannelID, helpMessage)
 	if err != nil {
 		log.Print(err.Error())

@@ -2,7 +2,6 @@ package command
 
 import (
 	"eqRaidBot/db/model"
-	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -151,7 +150,7 @@ func (r *CreateEventProvider) time(m *discordgo.MessageCreate) (string, error) {
 
 	t, err := time.Parse("01/02/2006 03:04PM MST", m.Content)
 	if err != nil {
-		return "", errors.New("there was a problem parsing your input")
+		return "", ErrorInvalidInput
 	}
 	v.time = t.UTC()
 	v.state = eventStateRepeating
@@ -171,7 +170,7 @@ func (r *CreateEventProvider) repeating(m *discordgo.MessageCreate) (string, err
 	case "2":
 		v.repeats = false
 	default:
-		return "", errors.New("invalid input")
+		return "", ErrorInvalidInput
 	}
 
 	v.state = eventStateDone
@@ -196,15 +195,15 @@ func (r *CreateEventProvider) done(m *discordgo.MessageCreate) (string, error) {
 		err := dat.toModel().Save(r.pool)
 		if err != nil {
 			log.Printf(err.Error())
-			return "", errors.New("there was an error saving the event")
+			return "", ErrorInternalError
 		}
 		r.reset(m)
 		return "The event has been saved", nil
 	} else if m.Content == "2" {
 		r.reset(m)
-		return "Reseting the event", nil
+		return "Resetting the event", nil
 	} else {
-		return "", errors.New("there was a problem with your input - please try again")
+		return "", ErrorInvalidInput
 	}
 }
 

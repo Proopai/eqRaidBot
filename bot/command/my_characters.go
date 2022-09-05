@@ -3,7 +3,6 @@ package command
 import (
 	"eqRaidBot/bot/eq"
 	"eqRaidBot/db/model"
-	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -65,7 +64,7 @@ func (p *MyCharactersProvider) list(m *discordgo.MessageCreate) (string, error) 
 	toons, err := char.GetByOwner(p.db, m.Author.ID)
 	if err != nil {
 		log.Println(err.Error())
-		return "", errors.New("There was a problem finding your characters.")
+		return "", ErrorInternalError
 	}
 
 	var charStrings []string

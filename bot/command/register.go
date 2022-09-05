@@ -104,7 +104,7 @@ func (r *RegistrationProvider) Handle(s *discordgo.Session, m *discordgo.Message
 	}
 
 	if _, ok := r.registry[m.Author.ID]; !ok {
-		err = sendMessage(s, c.ID, "Please restart the registration process by typing **!register** to the bot in the main channel")
+		err = sendMessage(s, c.ID, "Please restart the registration process by typing **!register**")
 		if err != nil {
 			return
 		}
@@ -153,11 +153,11 @@ func (r *RegistrationProvider) class(m *discordgo.MessageCreate) (string, error)
 	classId, err := strconv.ParseInt(m.Content, 10, 64)
 	if err != nil {
 		log.Println(err.Error())
-		return "", errors.New("there was an error with your input - please try again")
+		return "", ErrorInvalidInput
 	}
 
 	if _, ok := eq.ClassChoiceMap[classId]; !ok {
-		return "", errors.New("invalid class")
+		return "", errors.New("invalid class choice, please try again and pick the number next the corresponding class")
 	}
 
 	v := r.registry[m.Author.ID]
@@ -171,7 +171,7 @@ func (r *RegistrationProvider) class(m *discordgo.MessageCreate) (string, error)
 func (r *RegistrationProvider) level(m *discordgo.MessageCreate) (string, error) {
 	i, err := strconv.ParseInt(m.Content, 10, 64)
 	if err != nil {
-		return "", errors.New("there was an error with your input - please try again")
+		return "", ErrorInvalidInput
 	}
 
 	if i > eq.MaxLevel || i < 0 {
@@ -193,7 +193,7 @@ func (r *RegistrationProvider) meta(m *discordgo.MessageCreate) (string, error) 
 
 	typeId, err := strconv.ParseInt(m.Content, 10, 64)
 	if err != nil {
-		return "", errors.New("there was a problem parsing your input")
+		return "", ErrorInvalidInput
 	}
 
 	v := r.registry[m.Author.ID]
@@ -215,7 +215,7 @@ func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) 
 		err := dat.toModel().Save(r.pool)
 
 		if err != nil {
-			return "", errors.New("there was an error saving this information. Please try again, if the problem persists reach out to your administrator")
+			return "", ErrorInternalError
 		}
 
 		r.reset(m)
@@ -225,7 +225,7 @@ func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) 
 		r.reset(m)
 		return "Resetting all your information", nil
 	default:
-		return "", errors.New("there was an error with your input - please try again")
+		return "", ErrorInvalidInput
 	}
 }
 

@@ -2,7 +2,6 @@ package command
 
 import (
 	"eqRaidBot/db/model"
-	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -56,7 +55,7 @@ func (r *ListEventProvider) list(m *discordgo.MessageCreate) (string, error) {
 	e := model.Event{}
 	rows, err := e.GetAll(r.pool)
 	if err != nil {
-		return "", errors.New("there was a problem with this request")
+		return "", ErrorInternalError
 	}
 
 	var eventIds []int64
@@ -66,7 +65,7 @@ func (r *ListEventProvider) list(m *discordgo.MessageCreate) (string, error) {
 	at := model.Attendance{}
 	attendeeMap, err := at.GetAttendeesForEvents(r.pool, eventIds)
 	if err != nil {
-		return "", errors.New("there was a problem with this request")
+		return "", ErrorInternalError
 	}
 
 	var eventList []string
