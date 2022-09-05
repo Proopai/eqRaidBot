@@ -37,6 +37,7 @@ func NewCommandController(db *pgxpool.Pool) *CommandController {
 		command.NewListEventsProvider(db),
 		command.NewCreateEventProvider(db),
 		command.NewSplitProvider(db),
+		command.NewRosterProvider(db),
 	}
 
 	for _, p := range providers {
@@ -61,7 +62,7 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 
 	// only switch on valid commands
 	switch cmd {
-	case cmdRegister, cmdMyCharacters, cmdListEvents, cmdCreateEvent, cmdSplit:
+	case cmdRegister, cmdMyCharacters, cmdListEvents, cmdCreateEvent, cmdSplit, cmdRoster:
 		r.providers[cmd].Handle(s, m)
 	case cmdHelp:
 		r.help(s, m)
@@ -85,18 +86,6 @@ __Please refer to the list of commands below.__
 --------------------------------------------------------------
 %s
 `
-
-/*
-**!register** 		  - prompts the bot to begin a workflow which allows a user to registers ones characters.
-**!my-characters** 	  - shows the users registered characters.
-**!remove-character** - deletes a character from the list of selectable characters for a given user. (wip)
-**!withdraw**   	  - allows the user to reneg on a event they signed up for. (wip)
-**!split**    		  - splits registered members into N balanced groups for an event
-**!list-events**      - lists events.
-**!create-event**     - prompts the bot to begin the create event workflow
-**!help**     	      - shows this message
-`
-*/
 
 func (r *CommandController) help(s *discordgo.Session, m *discordgo.MessageCreate) {
 	var (

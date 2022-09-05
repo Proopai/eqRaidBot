@@ -100,6 +100,26 @@ order by level desc;`
 	return toons, nil
 }
 
+func (r *Character) GetAllAttendingEvent(db *pgxpool.Pool, eventId int64) ([]Character, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
+	var toons []Character
+	// types main and box
+	q := `SELECT * FROM characters 
+where character_type IN(1,2) 
+and id IN (select character_id from attendance where event_id = $1)
+order by level desc;`
+	if err = pgxscan.Select(context.Background(), db, &toons, q, eventId); err != nil {
+		return nil, err
+	}
+
+	return toons, nil
+}
+
 func (r *Character) GetWhereIn(db *pgxpool.Pool, characterIds []int64) ([]Character, error) {
 	conn, err := db.Acquire(context.Background())
 	if err != nil {

@@ -56,7 +56,7 @@ func (r *Splitter) Split(groupN int) ([][][]model.Character, []map[int64]int) {
 
 	var stats []map[int64]int
 	for _, s := range splits {
-		stats = append(stats, raidWideClassCounts(s))
+		stats = append(stats, RaidWideClassCounts(s))
 	}
 
 	return splitGroups, stats

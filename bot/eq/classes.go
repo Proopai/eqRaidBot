@@ -125,7 +125,7 @@ func PrintStats(stats map[int64]int) string {
 	return fmt.Sprintf("\nBreakdown: %d members - %s\n", total, strings.Join(ret, ", "))
 }
 
-func raidWideClassCounts(characters []model.Character) map[int64]int {
+func RaidWideClassCounts(characters []model.Character) map[int64]int {
 	classGroups := make(map[int64]int)
 	for _, c := range characters {
 		if _, ok := classGroups[c.Class]; !ok {
