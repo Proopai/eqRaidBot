@@ -38,7 +38,7 @@ func (r *AttendanceState) toModel() *model.Attendance {
 	return &model.Attendance{
 		EventId:     r.eventId,
 		CharacterId: r.characterId,
-		IsWithdrawn: false,
+		Withdrawn:   false,
 	}
 }
 
@@ -72,7 +72,7 @@ func (r *AttendanceProvider) Step(s *discordgo.Session, m *discordgo.MessageCrea
 
 	actioned, err := r.init(c, s, m)
 	if err != nil {
-		_ = sendMessage(s, c, err.Error())
+		_ = sendMessage(s, c.ID, err.Error())
 		return
 	}
 
@@ -85,16 +85,16 @@ func (r *AttendanceProvider) Step(s *discordgo.Session, m *discordgo.MessageCrea
 		err := r.charAck(c, s, m)
 		if err != nil {
 			log.Println(err.Error())
-			_ = sendMessage(s, c, "There was a problem fetching the events")
+			_ = sendMessage(s, c.ID, "There was a problem fetching the events")
 		}
 	case attendStateEvent:
 		err := r.eventAck(c, s, m)
 		if err != nil {
-			_ = sendMessage(s, c, "There was a problem fetching the events")
+			_ = sendMessage(s, c.ID, "There was a problem fetching the events")
 		}
 	case attendStateDone:
 		if err := r.doneAck(s, c, m); err != nil {
-			_ = sendMessage(s, c, "There was an error with your input - please try again")
+			_ = sendMessage(s, c.ID, "There was an error with your input - please try again")
 		}
 	}
 
@@ -128,7 +128,7 @@ func (r *AttendanceProvider) init(c *discordgo.Channel, s *discordgo.Session, m 
 			charString = append(charString, fmt.Sprintf("%d. %s", i, t.Name))
 		}
 
-		if err := sendMessage(s, c, fmt.Sprintf("Hello %s, which character will you be brining?\n%s", m.Author.Username, strings.Join(charString, "\n"))); err != nil {
+		if err := sendMessage(s, c.ID, fmt.Sprintf("Hello %s, which character will you be brining?\n%s", m.Author.Username, strings.Join(charString, "\n"))); err != nil {
 			return true, err
 		}
 		return true, nil
@@ -171,7 +171,7 @@ func (r *AttendanceProvider) charAck(c *discordgo.Channel, s *discordgo.Session,
 		r.eventReg[m.Author.ID][i] = e
 		eventString = append(eventString, fmt.Sprintf("%d. %s %s", i, e.Title, e.EventTime.Format(time.RFC822)))
 	}
-	err = sendMessage(s, c, fmt.Sprintf("What event are you signing up for?\n%s", strings.Join(eventString, "\n")))
+	err = sendMessage(s, c.ID, fmt.Sprintf("What event are you signing up for?\n%s", strings.Join(eventString, "\n")))
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (r *AttendanceProvider) eventAck(c *discordgo.Channel, s *discordgo.Session
 		}
 	}
 
-	err = sendMessage(s, c, fmt.Sprintf("Does this all look correct?\nCharacter: %s\nEvent: %s\n1. Yes\n2. No",
+	err = sendMessage(s, c.ID, fmt.Sprintf("Does this all look correct?\nCharacter: %s\nEvent: %s\n1. Yes\n2. No",
 		chosenChar.Name,
 		chosenEvent.Title,
 	))
@@ -240,14 +240,14 @@ func (r *AttendanceProvider) doneAck(s *discordgo.Session, c *discordgo.Channel,
 			return err
 		}
 
-		if err = sendMessage(s, c, "You're all signed up."); err != nil {
+		if err = sendMessage(s, c.ID, "You're all signed up."); err != nil {
 			return err
 		}
 
 		r.reset(m)
 		return nil
 	} else if m.Content == "2" {
-		if err := sendMessage(s, c, "Resetting all your information"); err != nil {
+		if err := sendMessage(s, c.ID, "Resetting all your information"); err != nil {
 			return err
 		}
 

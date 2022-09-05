@@ -65,7 +65,7 @@ func (a *AutoAttender) registerMembers() error {
 			attendance = append(attendance, model.Attendance{
 				EventId:     event.Id,
 				CharacterId: v.Id,
-				IsWithdrawn: false,
+				Withdrawn:   false,
 			})
 		}
 

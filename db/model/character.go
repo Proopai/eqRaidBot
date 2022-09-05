@@ -91,7 +91,7 @@ func (r *Character) GetAllNotAttendingEvent(db *pgxpool.Pool, eventId int64) ([]
 	// types main and box
 	q := `SELECT * FROM characters 
 where character_type IN(1,2) 
-and id NOT IN (select character_id from attedance where event_id = $1)
+and id NOT IN (select character_id from attendance where event_id = $1)
 order by level desc;`
 	if err = pgxscan.Select(context.Background(), db, &toons, q, eventId); err != nil {
 		return nil, err

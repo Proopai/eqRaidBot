@@ -70,11 +70,11 @@ func NewCreateEventProvider(db *pgxpool.Pool) *CreateEventProvider {
 }
 
 func (r *CreateEventProvider) Name() string {
-	return "!create-event"
+	return "!event-create"
 }
 
 func (r *CreateEventProvider) Description() string {
-	return "lists all events that have not passed and have been created"
+	return "begins an event creation workflow, may not be available to all users"
 }
 
 func (r *CreateEventProvider) Cleanup() {

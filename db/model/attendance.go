@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -13,8 +14,9 @@ import (
 type Attendance struct {
 	EventId     int64
 	CharacterId int64
-	IsWithdrawn bool
+	Withdrawn   bool
 	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 func (r *Attendance) Save(db *pgxpool.Pool) error {
@@ -30,7 +32,7 @@ func (r *Attendance) Save(db *pgxpool.Pool) error {
 	VALUES ($1, $2, $3, $4);`,
 		r.CharacterId,
 		r.EventId,
-		r.IsWithdrawn,
+		r.Withdrawn,
 		time.Now(),
 	)
 
@@ -52,15 +54,13 @@ func (r *Attendance) SaveBatch(db *pgxpool.Pool, rows []Attendance) error {
 
 	now := time.Now()
 
-	for k, r := range rows {
-		params = append(params, fmt.Sprintf("($%d, $%d, $%b, $%v)", k+1, k+2, k+3, k+4))
-		p := []interface{}{
-			r.CharacterId,
-			r.EventId,
-			r.IsWithdrawn,
-			now,
-		}
-		vals = append(vals, p...)
+	for _, r := range rows {
+		t := len(vals)
+		params = append(params, fmt.Sprintf("($%d, $%d, $%d, $%d)", t+1, t+2, t+3, t+4))
+		vals = append(vals, r.CharacterId)
+		vals = append(vals, r.EventId)
+		vals = append(vals, r.Withdrawn)
+		vals = append(vals, now)
 	}
 
 	q := fmt.Sprintf("INSERT INTO attendance (character_id, event_id, withdrawn, updated_at) VALUES %s;", strings.Join(params, ","))
@@ -76,25 +76,13 @@ func (r *Attendance) GetAttendees(db *pgxpool.Pool, eventId int64) ([]Character,
 		return nil, err
 	}
 
-	var attendees []Attendance
-	pgxscan.Select(context.Background(), db, &attendees, `SELECT * FROM attendance 
-	WHERE event_id = $1;`, eventId)
+	var attendees []Character
+	pgxscan.Select(context.Background(), db, &attendees, `SELECT * from characters where id IN (SELECT character_id FROM attendance 
+	WHERE event_id = $1 and withdrawn = false);`, eventId)
 
 	defer conn.Release()
 
-	var charIds []int64
-	for _, i := range attendees {
-		charIds = append(charIds, i.CharacterId)
-	}
-
-	char := Character{}
-	toons, err := char.GetWhereIn(db, charIds)
-	if err != nil {
-		return nil, err
-	}
-
-	return toons, nil
-
+	return attendees, nil
 }
 
 func (r *Attendance) GetAttendeesForEvents(db *pgxpool.Pool, eventIds []int64) (map[int64][]Character, error) {
@@ -103,9 +91,20 @@ func (r *Attendance) GetAttendeesForEvents(db *pgxpool.Pool, eventIds []int64) (
 		return nil, err
 	}
 
+	var (
+		idStrs []string
+		ids    []interface{}
+	)
+	for k, v := range eventIds {
+		idStrs = append(idStrs, fmt.Sprintf("$%d", k+1))
+		ids = append(ids, v)
+	}
+
 	var attendees []Attendance
-	pgxscan.Select(context.Background(), db, &attendees, `SELECT * FROM attendance 
-	WHERE event_id IN ($1);`, eventIds)
+	err = pgxscan.Select(context.Background(), db, &attendees, fmt.Sprintf(`SELECT * FROM attendance WHERE event_id IN (%s);`, strings.Join(idStrs, ", ")), ids...)
+	if err != nil {
+		log.Print(err.Error())
+	}
 
 	defer conn.Release()
 

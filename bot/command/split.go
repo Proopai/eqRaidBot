@@ -28,7 +28,7 @@ type SplitState struct {
 }
 
 func (r *SplitState) IsComplete() bool {
-	return r.state == splitStateSplit && r.eventId != 0
+	return r.state == splitStateDone && r.eventId != 0
 }
 
 type SplitProvider struct {
@@ -153,7 +153,7 @@ func (r *SplitProvider) event(m *discordgo.MessageCreate) (string, error) {
 	if vs.eventId == 0 {
 		return "", errors.New("invalid event selection")
 	} else {
-		vs.state = splitStateEvent
+		vs.state = splitStateSplit
 		r.registry[m.Author.ID] = vs
 	}
 
@@ -183,23 +183,27 @@ func (r *SplitProvider) split(m *discordgo.MessageCreate) (string, error) {
 	splitter := eq.NewSplitter(attendees, false)
 	splits := splitter.Split(i)
 
-	for i, split := range splits {
-		splitString += fmt.Sprintf("**Raid %d\n**", i)
+	for raidI, split := range splits {
+		splitString += fmt.Sprintf("*** ===> Raid %d <===***\n", raidI+1)
 		for g, group := range split {
-			splitString += fmt.Sprintf("Group %d\n", g)
+			splitString += fmt.Sprintf("** -- Group %d -- **\n", g+1)
+			var items []string
 			for j, c := range group {
 				if j == 0 {
-					splitString += fmt.Sprintf("**%s - %s**\n", eq.ClassChoiceMap[c.Class], c.Name)
+					items = append(items, fmt.Sprintf("*%s - %s*", eq.ClassChoiceMap[c.Class], c.Name))
 				} else {
-
-					splitString += fmt.Sprintf("%s - %s\n", eq.ClassChoiceMap[c.Class], c.Name)
+					items = append(items, fmt.Sprintf("%s - %s", eq.ClassChoiceMap[c.Class], c.Name))
 				}
 			}
-			splitString += "-----------------------------------------------\n"
+			splitString += strings.Join(items, ", ") + "\n"
 		}
-
-		splitString += "===============================================\n\n"
 	}
 
+	r.reset(m)
+
 	return splitString, nil
+}
+
+func (r *SplitProvider) reset(m *discordgo.MessageCreate) {
+	delete(r.registry, m.Author.ID)
 }

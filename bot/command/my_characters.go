@@ -35,7 +35,7 @@ func (p *MyCharactersProvider) Name() string {
 }
 
 func (p *MyCharactersProvider) Description() string {
-	return "Lists all the currently registered characters for a user."
+	return "lists all the currently registered characters for a user"
 }
 
 // we have no state to clean up with this command

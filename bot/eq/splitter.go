@@ -36,9 +36,11 @@ func (r *Splitter) Split(groupN int) [][][]model.Character {
 
 	if r.debug {
 		fmt.Printf("Splitting %d by %d, split size: %d\n", len(r.characters), groupN, len(splits[0]))
-		for i, c := range splits {
-			groups := r.buildGroups(c)
-			splitGroups[i] = groups
+	}
+	for i, c := range splits {
+		groups := r.buildGroups(c)
+		splitGroups[i] = groups
+		if r.debug {
 			fmt.Printf("\nSplit %d\n", i+1)
 			for _, g := range groups {
 				var gString string

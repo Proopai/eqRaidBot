@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"log"
 	"regexp"
+	"sort"
+	"strings"
 )
 
 const (
@@ -15,8 +17,8 @@ const (
 	cmdRemoveCharacter = "!remove-character"
 	cmdWithdraw        = "!withdraw"
 	cmdSplit           = "!split"
-	cmdListEvents      = "!list-events"
-	cmdCreateEvent     = "!create-event"
+	cmdListEvents      = "!event-list"
+	cmdCreateEvent     = "!event-create"
 	cmdRoster          = "!roster"
 	cmdHelp            = "!help"
 )
@@ -79,7 +81,7 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 }
 
 var helpMessage = `Eq Raid Bot is a discord based EverQuest raid helper. Its primary goal is to track and generate raid splits.
-Please refer to the list of commands below. 
+__Please refer to the list of commands below.__ 
 --------------------------------------------------------------
 %s
 `
@@ -108,13 +110,18 @@ func (r *CommandController) help(s *discordgo.Session, m *discordgo.MessageCreat
 		names = append(names, k)
 	}
 
+	sort.Strings(names)
+
 	cmdListString := ""
 
-	for _, p := range r.providers {
-		subStr := fmt.Sprintf("**%s**	-", p.Name(), p.Description())
-		cmdListString = fmt.Sprintf("%s", cmdListString)
+	for _, name := range names {
+		p := r.providers[name]
+		padding := strings.Repeat(" ", longest-len(name))
+		subStr := fmt.Sprintf("**%s**%s  -  %s\n", p.Name(), padding, p.Description())
+		cmdListString = fmt.Sprintf("%s%s", cmdListString, subStr)
 	}
-	_, err := s.ChannelMessageSend(m.ChannelID, helpMessage)
+
+	_, err := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(helpMessage, cmdListString))
 	if err != nil {
 		log.Print(err.Error())
 		return

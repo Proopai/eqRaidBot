@@ -28,11 +28,11 @@ func NewListEventsProvider(db *pgxpool.Pool) *ListEventProvider {
 }
 
 func (r *ListEventProvider) Name() string {
-	return "!list-events"
+	return "!event-list"
 }
 
 func (r *ListEventProvider) Description() string {
-	return "lists all events that have not passed and have been created"
+	return "lists all events that have not yet begun"
 }
 
 func (r *ListEventProvider) Cleanup() {

@@ -53,9 +53,19 @@ func processCommand(manifest *Manifest, state int64, m *discordgo.MessageCreate,
 		}
 		return actionError, nil
 	} else if msg != "" {
-		err = sendMessage(s, cId, msg)
-		if err != nil {
-			return 0, err
+		if len(msg) >= 2000 {
+			size := 1000
+			for _, m := range chunkMsg([]rune(msg), size) {
+				err = sendMessage(s, cId, m)
+				if err != nil {
+					return 0, err
+				}
+			}
+		} else {
+			err = sendMessage(s, cId, msg)
+			if err != nil {
+				return 0, err
+			}
 		}
 
 		return actionSent, nil
@@ -71,4 +81,32 @@ func sendMessage(s *discordgo.Session, channelId string, msg string) error {
 	}
 
 	return nil
+}
+
+// find midpoint via size and scan forward for a new line
+func chunkMsg(slice []rune, size int) []string {
+	var (
+		pieces     []string
+		breakpoint int
+	)
+
+	for {
+		if len(slice) <= size {
+			pieces = append(pieces, string(slice))
+			break
+		}
+
+		for idx, v := range slice[size:] {
+			if v == '\n' {
+				breakpoint = idx + size
+				break
+			}
+		}
+
+		pieces = append(pieces, string(slice[0:breakpoint+1]))
+		slice = slice[breakpoint+1:]
+	}
+
+	return pieces
+
 }

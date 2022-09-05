@@ -18,6 +18,7 @@ const (
 	regStateLevel = 3
 	regStateMata  = 4
 	regStateDone  = 5
+	regStateSaved = 6
 
 	typeBox  = 1
 	typeMain = 2
@@ -51,7 +52,7 @@ func (r *registrationState) toModel() *model.Character {
 }
 
 func (r *registrationState) IsComplete() bool {
-	return r.name != "" && r.class != 0 && r.level != 0
+	return r.state == regStateSaved
 }
 
 type RegistrationProvider struct {
@@ -223,7 +224,11 @@ func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) 
 		return "Saved your information.  You do not need to register this character again.", nil
 	case "2":
 		r.reset(m)
-		return "Resetting all your information", nil
+		extra, err := r.start(m)
+		if err != nil {
+
+		}
+		return fmt.Sprintf("Resetting all your information...\n\n%s", extra), nil
 	default:
 		return "", ErrorInvalidInput
 	}
