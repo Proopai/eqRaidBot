@@ -103,6 +103,11 @@ func chunkMsg(slice []rune, size int) []string {
 			}
 		}
 
+		if breakpoint >= len(slice) {
+			pieces = append(pieces, string(slice))
+			break
+		}
+
 		pieces = append(pieces, string(slice[0:breakpoint+1]))
 		slice = slice[breakpoint+1:]
 	}

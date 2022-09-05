@@ -181,19 +181,16 @@ func (r *SplitProvider) split(m *discordgo.MessageCreate) (string, error) {
 	var splitString string
 
 	splitter := eq.NewSplitter(attendees, false)
-	splits := splitter.Split(i)
+	splits, stats := splitter.Split(i)
 
 	for raidI, split := range splits {
-		splitString += fmt.Sprintf("*** ===> Raid %d <===***\n", raidI+1)
+		splitString += fmt.Sprintf("\n*** ===> Raid %d <===***\n", raidI+1)
+		splitString += fmt.Sprintf("%s\n", eq.PrintStats(stats[raidI]))
 		for g, group := range split {
-			splitString += fmt.Sprintf("** -- Group %d -- **\n", g+1)
+			splitString += fmt.Sprintf("__Group %d__\n", g+1)
 			var items []string
-			for j, c := range group {
-				if j == 0 {
-					items = append(items, fmt.Sprintf("*%s - %s*", eq.ClassChoiceMap[c.Class], c.Name))
-				} else {
-					items = append(items, fmt.Sprintf("%s - %s", eq.ClassChoiceMap[c.Class], c.Name))
-				}
+			for _, c := range group {
+				items = append(items, c.Name)
 			}
 			splitString += strings.Join(items, ", ") + "\n"
 		}

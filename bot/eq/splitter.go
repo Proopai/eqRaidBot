@@ -28,7 +28,7 @@ func NewSplitter(c []model.Character, debug bool) *Splitter {
 
 // raid should have 1 main tank group - and DPS / healing groups
 // bards should be spread - enchanters paired with healers, and melee clustered together
-func (r *Splitter) Split(groupN int) [][][]model.Character {
+func (r *Splitter) Split(groupN int) ([][][]model.Character, []map[int64]int) {
 	classGroups := raidWideClassGroups(r.characters)
 	splits := r.getSplits(groupN, classGroups)
 
@@ -37,6 +37,7 @@ func (r *Splitter) Split(groupN int) [][][]model.Character {
 	if r.debug {
 		fmt.Printf("Splitting %d by %d, split size: %d\n", len(r.characters), groupN, len(splits[0]))
 	}
+
 	for i, c := range splits {
 		groups := r.buildGroups(c)
 		splitGroups[i] = groups
@@ -53,7 +54,12 @@ func (r *Splitter) Split(groupN int) [][][]model.Character {
 		}
 	}
 
-	return splitGroups
+	var stats []map[int64]int
+	for _, s := range splits {
+		stats = append(stats, raidWideClassCounts(s))
+	}
+
+	return splitGroups, stats
 }
 
 func (r *Splitter) buildGroups(raidList []model.Character) [][]model.Character {
