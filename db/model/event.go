@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/georgysavva/scany/pgxscan"
@@ -58,6 +60,30 @@ func (r *Event) GetAll(db *pgxpool.Pool) ([]Event, error) {
 	var events []Event
 	pgxscan.Select(context.Background(), db, &events, `SELECT * FROM events 
 	WHERE event_time > NOW() order by event_time desc;`)
+
+	return events, nil
+}
+
+func (r *Event) GetWhereIn(db *pgxpool.Pool, eventIds []int64) ([]Event, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	defer conn.Release()
+
+	var events []Event
+	var part []string
+	seen := make(map[int64]bool)
+	for _, id := range eventIds {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		part = append(part, fmt.Sprintf("%d", id))
+		seen[id] = true
+	}
+	pgxscan.Select(context.Background(), db, &events, fmt.Sprintf(`SELECT * FROM events 
+	WHERE id IN (%s);`, strings.Join(part, ",")))
 
 	return events, nil
 }

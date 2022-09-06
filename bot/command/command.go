@@ -45,6 +45,10 @@ type Manifest struct {
 type Step func(m *discordgo.MessageCreate) (string, error)
 
 func actionCommandManifest(manifest *Manifest, state int64, m *discordgo.MessageCreate) (string, error) {
+
+	if state < 0 || state > int64(len(manifest.Steps)-1) {
+		return "", ErrorInternalError
+	}
 	res, err := manifest.Steps[state](m)
 	if err != nil {
 		return "", err
@@ -72,8 +76,8 @@ func genericStepwiseHandler(s *discordgo.Session, m *discordgo.MessageCreate, ma
 		return
 	}
 
-	action, _ := processCommand(manifest, 0, m, s, c.ID)
-	if action == actionSent {
+	action, err := processCommand(manifest, 0, m, s, c.ID)
+	if action == actionSent || actionError == action {
 		return
 	}
 

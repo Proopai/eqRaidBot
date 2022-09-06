@@ -138,5 +138,11 @@ func (r *RosterProvider) done(m *discordgo.MessageCreate) (string, error) {
 	statString := eq.PrintStats(eq.RaidWideClassCounts(toons))
 	str := fmt.Sprintf("Summary:\n%s", statString)
 
+	r.reset(m)
+
 	return str, nil
+}
+
+func (r *RosterProvider) reset(m *discordgo.MessageCreate) {
+	delete(r.registry, m.Author.ID)
 }

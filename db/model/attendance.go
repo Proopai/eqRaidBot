@@ -85,6 +85,24 @@ func (r *Attendance) GetAttendees(db *pgxpool.Pool, eventId int64) ([]Character,
 	return attendees, nil
 }
 
+func (r *Attendance) GetPendingAttendance(db *pgxpool.Pool, userId string) ([]Attendance, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var attendees []Attendance
+	pgxscan.Select(context.Background(), db, &attendees, `SELECT a.* from attendance a
+LEFT JOIN characters c on a.character_id = c.id 
+LEFT JOIN events e on a.event_id = e.id
+WHERE c.created_by=$1
+AND e.event_time > NOW();`, userId)
+
+	defer conn.Release()
+
+	return attendees, nil
+}
+
 func (r *Attendance) GetAttendeesForEvents(db *pgxpool.Pool, eventIds []int64) (map[int64][]Character, error) {
 	conn, err := db.Acquire(context.Background())
 	if err != nil {

@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/georgysavva/scany/pgxscan"
@@ -129,8 +131,18 @@ func (r *Character) GetWhereIn(db *pgxpool.Pool, characterIds []int64) ([]Charac
 	defer conn.Release()
 
 	var toons []Character
-	pgxscan.Select(context.Background(), db, &toons, `SELECT * FROM characters 
-	WHERE id IN ($1);`, characterIds)
+	var part []string
+	seen := make(map[int64]bool)
+	for _, id := range characterIds {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		part = append(part, fmt.Sprintf("%d", id))
+		seen[id] = true
+	}
+
+	pgxscan.Select(context.Background(), db, &toons, fmt.Sprintf(`SELECT * FROM characters 
+	WHERE id IN (%s);`, strings.Join(part, ", ")))
 
 	return toons, nil
 }

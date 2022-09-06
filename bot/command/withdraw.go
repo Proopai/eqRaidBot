@@ -1,29 +1,56 @@
 package command
 
 import (
-	"eqRaidBot/bot/eq"
 	"eqRaidBot/db/model"
+	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"log"
 	"strings"
+	"time"
+)
+
+const (
+	withdrawStateStart   = 0
+	withdrawStateConfirm = 1
+	withdrawStateEvent   = 2
+	withdrawStateDone    = 3
 )
 
 type WithdrawProvider struct {
 	manifest *Manifest
-	db       *pgxpool.Pool
+	registry StateRegistry
+
+	attReg map[string][]model.Attendance
+	db     *pgxpool.Pool
+}
+
+type withdrawState struct {
+	eventId int64
+	state   int64
+	userId  string
+}
+
+func (r *withdrawState) IsComplete() bool {
+	return r.state == withdrawStateDone && r.eventId != 0
+}
+
+func (r *withdrawState) Step() int64 {
+	return r.state
 }
 
 func NewWithdrawProvider(db *pgxpool.Pool) *WithdrawProvider {
 	provider := &WithdrawProvider{
-		manifest: nil,
+		registry: make(StateRegistry),
+		attReg:   make(map[string][]model.Attendance),
 		db:       db,
 	}
 
 	steps := []Step{
 		provider.start,
 		provider.eventOrNext,
+		provider.handleEvent,
 	}
 
 	provider.manifest = &Manifest{Steps: steps}
@@ -45,42 +72,153 @@ func (p *WithdrawProvider) Cleanup() {
 }
 
 func (p *WithdrawProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
-	c, err := s.UserChannelCreate(m.Author.ID)
-	if err != nil {
-		log.Print(err.Error())
-		return
-	}
-
-	if _, err := processCommand(p.manifest, 0, m, s, c.ID); err != nil {
-		log.Println(err.Error())
-	}
+	genericStepwiseHandler(s, m, p.manifest, p.registry)
 }
 
 func (p *WithdrawProvider) WorkflowForUser(userId string) State {
-	return nil
+	if v, ok := p.registry[userId]; ok {
+		return v
+	} else {
+		return nil
+	}
 }
 
 func (p *WithdrawProvider) start(m *discordgo.MessageCreate) (string, error) {
-	char := model.Character{}
-	toons, err := char.GetByOwner(p.db, m.Author.ID)
+	if _, ok := p.registry[m.Author.ID]; !ok {
+		p.registry[m.Author.ID] = &withdrawState{
+			state:  withdrawStateConfirm,
+			userId: m.Author.ID,
+		}
+
+		return "Please pick an option:\n1. Withdraw from the next event on all characters\n2. Withdraw from a specific event", nil
+	}
+
+	return "", nil
+}
+
+func (p *WithdrawProvider) eventOrNext(m *discordgo.MessageCreate) (string, error) {
+	switch m.Content {
+	case "1":
+		// next event
+		return p.next(m)
+	case "2":
+		return p.event(m)
+	default:
+		return "", ErrorInvalidInput
+	}
+}
+
+func (p *WithdrawProvider) event(m *discordgo.MessageCreate) (string, error) {
+	a := model.Attendance{}
+	att, err := a.GetPendingAttendance(p.db, m.Author.ID)
 	if err != nil {
 		log.Println(err.Error())
 		return "", ErrorInternalError
 	}
 
-	var charStrings []string
-
-	for i, k := range toons {
-		charStrings = append(charStrings, fmt.Sprintf("%d. %s - %d %s %s", i+1, k.Name, k.Level, eq.ClassChoiceMap[k.Class], charTypeMap[k.CharacterType]))
+	if len(att) == 0 {
+		log.Println("no pending invitations")
+		p.reset(m)
+		return "", errors.New("you have no pending invitations")
 	}
 
-	if len(charStrings) == 0 {
-		charStrings = []string{"No characters found."}
+	eMap, cMap, err := p.metaData(att)
+	if err != nil {
+		return "", ErrorInternalError
 	}
 
-	return strings.Join(charStrings, "\n"), nil
+	v := p.registry[m.Author.ID].(*withdrawState)
+	v.state = withdrawStateEvent
+
+	p.registry[m.Author.ID] = v
+	p.attReg[m.Author.ID] = att
+
+	return p.individualString(att, cMap, eMap)
 }
 
-func (p *WithdrawProvider) eventOrNext(m *discordgo.MessageCreate) (string, error) {
+func (p *WithdrawProvider) next(m *discordgo.MessageCreate) (string, error) {
+	p.reset(m)
 	return "", nil
+}
+
+func (p *WithdrawProvider) handleEvent(m *discordgo.MessageCreate) (string, error) {
+	return "", nil
+}
+
+func (p *WithdrawProvider) individualString(att []model.Attendance, cMap map[int64]model.Character, eMap map[int64]model.Event) (string, error) {
+	var msgs []string
+	for idx, at := range att {
+		var char model.Character
+		var event model.Event
+
+		if v, ok := cMap[at.CharacterId]; ok {
+			char = v
+		}
+
+		if v, ok := eMap[at.EventId]; ok {
+			event = v
+		}
+
+		if char.Id == 0 || event.Id == 0 {
+			return "", ErrorInternalError
+		}
+
+		msgs = append(msgs, fmt.Sprintf("%d. %s as %s @ %s %s",
+			idx,
+			char.Name,
+			charTypeMap[char.CharacterType],
+			event.EventTime.Format(time.RFC822),
+			event.Title,
+		))
+
+	}
+
+	return strings.Join(msgs, "\n"), nil
+
+}
+
+func (p *WithdrawProvider) metaData(att []model.Attendance) (map[int64]model.Event, map[int64]model.Character, error) {
+
+	var (
+		charIds  []int64
+		eventIds []int64
+	)
+
+	e := model.Event{}
+	c := model.Character{}
+
+	for _, v := range att {
+		charIds = append(charIds, v.CharacterId)
+		eventIds = append(eventIds, v.EventId)
+	}
+
+	events, err := e.GetWhereIn(p.db, eventIds)
+	if err != nil {
+		log.Print(err.Error())
+		return nil, nil, ErrorInternalError
+	}
+
+	characters, err := c.GetWhereIn(p.db, charIds)
+	if err != nil {
+		log.Print(err.Error())
+		return nil, nil, ErrorInternalError
+	}
+
+	eventMap := make(map[int64]model.Event)
+	charMap := make(map[int64]model.Character)
+
+	for _, ev := range events {
+		eventMap[ev.Id] = ev
+	}
+
+	for _, char := range characters {
+		charMap[char.Id] = char
+	}
+
+	return eventMap, charMap, nil
+}
+
+func (p *WithdrawProvider) reset(m *discordgo.MessageCreate) {
+	delete(p.registry, m.Author.ID)
+	delete(p.attReg, m.Author.ID)
 }

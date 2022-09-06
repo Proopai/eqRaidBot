@@ -87,7 +87,7 @@ var ClassChoiceMap = map[int64]string{
 var ClassChoiceString = func() string {
 	str := ""
 	var i int64
-	for i = 1; i < int64(len(ClassChoiceMap)); i++ {
+	for i = 1; i <= int64(len(ClassChoiceMap)); i++ {
 		str += fmt.Sprintf("%d. %s\n", i, ClassChoiceMap[i])
 	}
 	return str

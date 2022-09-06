@@ -6,6 +6,7 @@ require (
 	github.com/bwmarrin/discordgo v0.25.0
 	github.com/georgysavva/scany v1.1.0
 	github.com/jackc/pgx/v4 v4.17.0
+	github.com/lib/pq v1.10.2
 	github.com/rs/zerolog v1.15.0
 )
 
