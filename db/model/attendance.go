@@ -29,11 +29,29 @@ func (r *Attendance) Save(db *pgxpool.Pool) error {
 
 	conn.QueryRow(context.Background(), `INSERT INTO attendance 
 	(character_id, event_id, withdrawn, updated_at) 
-	VALUES ($1, $2, $3, $4);`,
+	VALUES ($1, $2, $3, NOW());`,
 		r.CharacterId,
 		r.EventId,
 		r.Withdrawn,
-		time.Now(),
+	)
+
+	return nil
+}
+
+func (r *Attendance) Update(db *pgxpool.Pool) error {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return err
+	}
+
+	defer conn.Release()
+
+	conn.QueryRow(context.Background(), `UPDATE attendance 
+SET withdrawn=$1, updated_at=NOW() 
+WHERE event_id=$2 AND character_id=$3;`,
+		r.Withdrawn,
+		r.EventId,
+		r.CharacterId,
 	)
 
 	return nil
@@ -85,6 +103,23 @@ func (r *Attendance) GetAttendees(db *pgxpool.Pool, eventId int64) ([]Character,
 	return attendees, nil
 }
 
+func (r *Attendance) GetMyAttendanceForEvent(db *pgxpool.Pool, eventId int64, userId string) ([]Attendance, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var attendees []Attendance
+	pgxscan.Select(context.Background(), db, &attendees, `SELECT a.* from attendance a
+LEFT JOIN characters c on a.character_id = c.id 
+WHERE c.created_by=$1
+AND a.event_id=$2;`, userId, eventId)
+
+	defer conn.Release()
+
+	return attendees, nil
+}
+
 func (r *Attendance) GetPendingAttendance(db *pgxpool.Pool, userId string) ([]Attendance, error) {
 	conn, err := db.Acquire(context.Background())
 	if err != nil {
@@ -96,6 +131,7 @@ func (r *Attendance) GetPendingAttendance(db *pgxpool.Pool, userId string) ([]At
 LEFT JOIN characters c on a.character_id = c.id 
 LEFT JOIN events e on a.event_id = e.id
 WHERE c.created_by=$1
+AND a.withdrawn=false
 AND e.event_time > NOW();`, userId)
 
 	defer conn.Release()
@@ -119,7 +155,7 @@ func (r *Attendance) GetAttendeesForEvents(db *pgxpool.Pool, eventIds []int64) (
 	}
 
 	var attendees []Attendance
-	err = pgxscan.Select(context.Background(), db, &attendees, fmt.Sprintf(`SELECT * FROM attendance WHERE event_id IN (%s);`, strings.Join(idStrs, ", ")), ids...)
+	err = pgxscan.Select(context.Background(), db, &attendees, fmt.Sprintf(`SELECT * FROM attendance WHERE event_id IN (%s) AND withdrawn=false;`, strings.Join(idStrs, ", ")), ids...)
 	if err != nil {
 		log.Print(err.Error())
 	}

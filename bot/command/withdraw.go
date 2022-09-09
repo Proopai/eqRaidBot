@@ -137,8 +137,30 @@ func (p *WithdrawProvider) event(m *discordgo.MessageCreate) (string, error) {
 }
 
 func (p *WithdrawProvider) next(m *discordgo.MessageCreate) (string, error) {
+	// find the next event and remove all characters that are registered to me from it.
+	events := model.Event{}
+	attendance := model.Attendance{}
+
+	nextEvent, err := events.GetNext(p.db)
+	if err != nil {
+		return "", ErrorInternalError
+	}
+
+	att, err := attendance.GetMyAttendanceForEvent(p.db, nextEvent.Id, m.Author.ID)
+	if err != nil {
+		return "", ErrorInternalError
+	}
+
+	for i := range att {
+		att[i].Withdrawn = true
+		err := att[i].Update(p.db)
+		if err != nil {
+			return "", ErrorInternalError
+		}
+	}
 	p.reset(m)
-	return "", nil
+
+	return fmt.Sprintf("%d attendees have been marked as absent from %s on %v", len(att), nextEvent.Title, nextEvent.EventTime), nil
 }
 
 func (p *WithdrawProvider) handleEvent(m *discordgo.MessageCreate) (string, error) {
@@ -148,8 +170,10 @@ func (p *WithdrawProvider) handleEvent(m *discordgo.MessageCreate) (string, erro
 func (p *WithdrawProvider) individualString(att []model.Attendance, cMap map[int64]model.Character, eMap map[int64]model.Event) (string, error) {
 	var msgs []string
 	for idx, at := range att {
-		var char model.Character
-		var event model.Event
+		var (
+			event model.Event
+			char  model.Character
+		)
 
 		if v, ok := cMap[at.CharacterId]; ok {
 			char = v

@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -59,9 +60,28 @@ func (r *Event) GetAll(db *pgxpool.Pool) ([]Event, error) {
 
 	var events []Event
 	pgxscan.Select(context.Background(), db, &events, `SELECT * FROM events 
-	WHERE event_time > NOW() order by event_time desc;`)
+	WHERE event_time > NOW() order by event_time;`)
 
 	return events, nil
+}
+
+func (r *Event) GetNext(db *pgxpool.Pool) (Event, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return Event{}, err
+	}
+
+	defer conn.Release()
+
+	var events []Event
+	pgxscan.Select(context.Background(), db, &events, `SELECT * FROM events 
+	WHERE event_time > NOW() order by event_time limit 1;`)
+
+	if len(events) > 0 {
+		return events[0], nil
+	}
+
+	return Event{}, errors.New("not found")
 }
 
 func (r *Event) GetWhereIn(db *pgxpool.Pool, eventIds []int64) ([]Event, error) {
