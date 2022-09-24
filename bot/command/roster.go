@@ -22,6 +22,7 @@ type rosterState struct {
 	eventId int64
 	state   int64
 	userId  string
+	ttl     time.Time
 }
 
 func (r *rosterState) IsComplete() bool {
@@ -30,6 +31,10 @@ func (r *rosterState) IsComplete() bool {
 
 func (r *rosterState) Step() int64 {
 	return r.state
+}
+
+func (r *rosterState) TTL() time.Time {
+	return r.ttl
 }
 
 type RosterProvider struct {
@@ -65,6 +70,10 @@ func (r *RosterProvider) Description() string {
 }
 
 func (r *RosterProvider) Cleanup() {
+	cleanupCache(r.registry, func(k string) {
+		delete(r.registry, k)
+		delete(r.eventReg, k)
+	})
 }
 
 func (r *RosterProvider) WorkflowForUser(userId string) State {
@@ -94,6 +103,7 @@ func (r *RosterProvider) start(m *discordgo.MessageCreate) (string, error) {
 		r.registry[m.Author.ID] = &rosterState{
 			state:  rosterStatePrint,
 			userId: m.Author.ID,
+			ttl:    time.Now().Add(commandCacheWindow),
 		}
 
 		r.eventReg[m.Author.ID] = make(map[int]model.Event)
@@ -138,11 +148,12 @@ func (r *RosterProvider) done(m *discordgo.MessageCreate) (string, error) {
 	statString := eq.PrintStats(eq.RaidWideClassCounts(toons))
 	str := fmt.Sprintf("Summary:\n%s", statString)
 
-	r.reset(m)
+	r.Reset(m)
 
 	return str, nil
 }
 
-func (r *RosterProvider) reset(m *discordgo.MessageCreate) {
+func (r *RosterProvider) Reset(m *discordgo.MessageCreate) {
 	delete(r.registry, m.Author.ID)
+	delete(r.eventReg, m.Author.ID)
 }

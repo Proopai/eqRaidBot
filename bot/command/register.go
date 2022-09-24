@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"log"
 	"strconv"
+	"time"
 )
 
 const (
@@ -19,17 +20,7 @@ const (
 	regStateMata  = 4
 	regStateDone  = 5
 	regStateSaved = 6
-
-	typeBox  = 1
-	typeMain = 2
-	typeAlt  = 3
 )
-
-var charTypeMap = map[int64]string{
-	typeBox:  "Box",
-	typeMain: "Main",
-	typeAlt:  "Alt",
-}
 
 type registrationState struct {
 	state    int64
@@ -38,6 +29,7 @@ type registrationState struct {
 	level    int64
 	userId   string
 	charType int64
+	ttl      time.Time
 }
 
 func (r *registrationState) toModel() *model.Character {
@@ -53,6 +45,10 @@ func (r *registrationState) toModel() *model.Character {
 
 func (r *registrationState) IsComplete() bool {
 	return r.state == regStateSaved
+}
+
+func (r *registrationState) TTL() time.Time {
+	return r.ttl
 }
 
 func (r *registrationState) Step() int64 {
@@ -94,6 +90,9 @@ func (r *RegistrationProvider) Description() string {
 }
 
 func (r *RegistrationProvider) Cleanup() {
+	cleanupCache(r.registry, func(k string) {
+		delete(r.registry, k)
+	})
 }
 
 func (r *RegistrationProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -113,6 +112,7 @@ func (r *RegistrationProvider) start(m *discordgo.MessageCreate) (string, error)
 	if _, ok := r.registry[m.Author.ID]; !ok {
 		r.registry[m.Author.ID] = &registrationState{
 			state:  regStateName,
+			ttl:    time.Now().Add(commandCacheWindow),
 			userId: m.Author.ID,
 		}
 
@@ -165,7 +165,7 @@ func (r *RegistrationProvider) level(m *discordgo.MessageCreate) (string, error)
 	v.state = regStateMata
 	r.registry[m.Author.ID] = v
 
-	return "How would you describe this character?\n1. Box\n2. Main\n3. Alt", nil
+	return "You can only have one 'main' and one 'box', all other characters must be registered as alts.\n\nHow would you describe this character?\n1. Box\n2. Main\n3. Alt", nil
 }
 
 func (r *RegistrationProvider) meta(m *discordgo.MessageCreate) (string, error) {
@@ -178,6 +178,27 @@ func (r *RegistrationProvider) meta(m *discordgo.MessageCreate) (string, error) 
 		return "", ErrorInvalidInput
 	}
 
+	c := model.Character{}
+	toons, err := c.GetByOwner(r.pool, m.Author.ID)
+	if err != nil {
+		return "", ErrorInternalError
+	}
+
+	switch typeId {
+	case model.TypeMain, model.TypeBox:
+		for _, k := range toons {
+			if typeId == model.TypeMain {
+				if k.CharacterType == model.TypeMain {
+					return "You already have a main character registered, please choose alt, or box if you wish to register this character as a valid raid box.", nil
+				}
+			} else {
+				if k.CharacterType == model.TypeBox {
+					return "You already have an box character registered, please choose main, or alt.", nil
+				}
+			}
+		}
+	}
+
 	v := r.registry[m.Author.ID].(*registrationState)
 	v.charType = typeId
 	v.state = regStateDone
@@ -187,7 +208,7 @@ func (r *RegistrationProvider) meta(m *discordgo.MessageCreate) (string, error) 
 		v.name,
 		eq.ClassChoiceMap[v.class],
 		v.level,
-		charTypeMap[v.charType]), nil
+		model.CharTypeMap[v.charType]), nil
 }
 
 func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) {
@@ -200,11 +221,11 @@ func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) 
 			return "", ErrorInternalError
 		}
 
-		r.reset(m)
+		r.Reset(m)
 
 		return "Saved your information.  You do not need to register this character again.", nil
 	case "2":
-		r.reset(m)
+		r.Reset(m)
 		extra, err := r.start(m)
 		if err != nil {
 
@@ -215,6 +236,6 @@ func (r *RegistrationProvider) done(m *discordgo.MessageCreate) (string, error) 
 	}
 }
 
-func (r *RegistrationProvider) reset(m *discordgo.MessageCreate) {
+func (r *RegistrationProvider) Reset(m *discordgo.MessageCreate) {
 	delete(r.registry, m.Author.ID)
 }

@@ -39,6 +39,8 @@ func (a *AutoAttender) registerMembers() error {
 	characterProvider := model.Character{}
 	attendanceProvider := model.Attendance{}
 
+	now := time.Now()
+
 	events, err := eventProvider.GetAll(a.db)
 	if err != nil {
 		return err
@@ -49,6 +51,8 @@ func (a *AutoAttender) registerMembers() error {
 		return nil
 	}
 
+	log.Printf("processing %d events...", len(events))
+
 	for _, event := range events {
 		toons, err := characterProvider.GetAllNotAttendingEvent(a.db, event.Id)
 		if err != nil {
@@ -56,7 +60,6 @@ func (a *AutoAttender) registerMembers() error {
 		}
 
 		if len(toons) == 0 {
-			log.Printf("No toons found for event %d", event.Id)
 			continue
 		}
 
@@ -75,5 +78,7 @@ func (a *AutoAttender) registerMembers() error {
 			return err
 		}
 	}
+
+	log.Printf("done in %f...", time.Since(now).Seconds())
 	return nil
 }

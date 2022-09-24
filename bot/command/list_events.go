@@ -37,6 +37,9 @@ func (r *ListEventProvider) Description() string {
 func (r *ListEventProvider) Cleanup() {
 }
 
+func (r *ListEventProvider) Reset(m *discordgo.MessageCreate) {
+}
+
 func (r *ListEventProvider) WorkflowForUser(userId string) State {
 	return nil
 }

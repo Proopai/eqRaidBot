@@ -13,6 +13,7 @@ import (
 
 type CommandController struct {
 	providers map[string]command.Provider
+	helpStr   string
 }
 
 var regMatch = regexp.MustCompile("^(![a-zA-Z]+-?[a-zA-Z]+)")
@@ -52,6 +53,10 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 	// only switch on valid commands
 	switch cmd {
 	case command.Register, command.MyCharacters, command.ListEvents, command.CreateEvent, command.Split, command.Roster, command.Withdraw:
+		log.Printf("processing command %s for user %s", cmd, m.Author.ID)
+		for _, r := range r.providers {
+			r.Reset(m)
+		}
 		r.providers[cmd].Handle(s, m)
 	case command.Help:
 		r.help(s, m)
@@ -61,8 +66,8 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 			if state == nil {
 				continue
 			}
-
 			if !state.IsComplete() {
+				log.Printf("processing workflow step %s:%d for user %s", p.Name(), state.Step(), m.Author.ID)
 				p.Handle(s, m)
 				return
 			}
@@ -81,25 +86,30 @@ func (r *CommandController) help(s *discordgo.Session, m *discordgo.MessageCreat
 		names   []string
 		longest int
 	)
-	for k := range r.providers {
-		if len(k) > longest {
-			longest = len(k)
+
+	if r.helpStr == "" {
+		for k := range r.providers {
+			if len(k) > longest {
+				longest = len(k)
+			}
+			names = append(names, k)
 		}
-		names = append(names, k)
+
+		sort.Strings(names)
+
+		cmdListString := ""
+
+		for _, name := range names {
+			p := r.providers[name]
+			padding := strings.Repeat(" ", longest-len(name))
+			subStr := fmt.Sprintf("**%s**%s  -  %s\n", p.Name(), padding, p.Description())
+			cmdListString = fmt.Sprintf("%s%s", cmdListString, subStr)
+		}
+
+		r.helpStr = cmdListString
 	}
 
-	sort.Strings(names)
-
-	cmdListString := ""
-
-	for _, name := range names {
-		p := r.providers[name]
-		padding := strings.Repeat(" ", longest-len(name))
-		subStr := fmt.Sprintf("**%s**%s  -  %s\n", p.Name(), padding, p.Description())
-		cmdListString = fmt.Sprintf("%s%s", cmdListString, subStr)
-	}
-
-	_, err := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(helpMessage, cmdListString))
+	_, err := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(helpMessage, r.helpStr))
 	if err != nil {
 		log.Print(err.Error())
 		return

@@ -10,6 +10,18 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+const (
+	TypeBox  = 1
+	TypeMain = 2
+	TypeAlt  = 3
+)
+
+var CharTypeMap = map[int64]string{
+	TypeBox:  "Box",
+	TypeMain: "Main",
+	TypeAlt:  "Alt",
+}
+
 type Character struct {
 	Id            int64
 	Name          string

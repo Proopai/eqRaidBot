@@ -33,6 +33,7 @@ type eventState struct {
 	time        time.Time
 	repeats     bool
 	state       int64
+	ttl         time.Time
 }
 
 func (r *eventState) IsComplete() bool {
@@ -41,6 +42,10 @@ func (r *eventState) IsComplete() bool {
 
 func (r *eventState) Step() int64 {
 	return r.state
+}
+
+func (r *eventState) TTL() time.Time {
+	return r.ttl
 }
 
 func (r *eventState) toModel() *model.Event {
@@ -82,6 +87,9 @@ func (r *CreateEventProvider) Description() string {
 }
 
 func (r *CreateEventProvider) Cleanup() {
+	cleanupCache(r.registry, func(k string) {
+		delete(r.registry, k)
+	})
 }
 
 func (r *CreateEventProvider) WorkflowForUser(userId string) State {
@@ -100,6 +108,7 @@ func (r *CreateEventProvider) start(m *discordgo.MessageCreate) (string, error) 
 	if _, ok := r.registry[m.Author.ID]; !ok {
 		r.registry[m.Author.ID] = &eventState{
 			state:  eventStateName,
+			ttl:    time.Now().Add(commandCacheWindow),
 			userId: m.Author.ID,
 		}
 		return fmt.Sprintf("Hello %s, what should we call this event?", m.Author.Username), nil
@@ -137,7 +146,7 @@ func (r *CreateEventProvider) time(m *discordgo.MessageCreate) (string, error) {
 	v.(*eventState).state = eventStateRepeating
 	r.registry[m.Author.ID] = v
 
-	return `Does the event repeat?. (1 or 2) 
+	return `Does the event repeat weekly?. (1 or 2) 
 1. Yes
 2. No`, nil
 }
@@ -161,7 +170,7 @@ func (r *CreateEventProvider) repeating(m *discordgo.MessageCreate) (string, err
 Title: %s
 Description: %s
 Time: %s
-Repeating: %t
+Repeats weekly: %t
 
 1. Yes
 2. No`
@@ -182,16 +191,16 @@ func (r *CreateEventProvider) done(m *discordgo.MessageCreate) (string, error) {
 			log.Printf(err.Error())
 			return "", ErrorInternalError
 		}
-		r.reset(m)
+		r.Reset(m)
 		return "The event has been saved", nil
 	} else if m.Content == "2" {
-		r.reset(m)
+		r.Reset(m)
 		return "Resetting the event", nil
 	} else {
 		return "", ErrorInvalidInput
 	}
 }
 
-func (r *CreateEventProvider) reset(m *discordgo.MessageCreate) {
+func (r *CreateEventProvider) Reset(m *discordgo.MessageCreate) {
 	delete(r.registry, m.Author.ID)
 }

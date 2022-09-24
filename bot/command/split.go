@@ -24,6 +24,7 @@ type splitState struct {
 	eventId int64
 	state   int64
 	userId  string
+	ttl     time.Time
 }
 
 func (r *splitState) IsComplete() bool {
@@ -32,6 +33,10 @@ func (r *splitState) IsComplete() bool {
 
 func (r *splitState) Step() int64 {
 	return r.state
+}
+
+func (r *splitState) TTL() time.Time {
+	return r.ttl
 }
 
 type SplitProvider struct {
@@ -68,6 +73,10 @@ func (r *SplitProvider) Description() string {
 }
 
 func (r *SplitProvider) Cleanup() {
+	cleanupCache(r.registry, func(k string) {
+		delete(r.registry, k)
+		delete(r.eventReg, k)
+	})
 }
 
 func (r *SplitProvider) WorkflowForUser(userId string) State {
@@ -98,6 +107,7 @@ func (r *SplitProvider) start(m *discordgo.MessageCreate) (string, error) {
 		r.registry[m.Author.ID] = &splitState{
 			state:  splitStateEvent,
 			userId: m.Author.ID,
+			ttl:    time.Now().Add(commandCacheWindow),
 		}
 
 		r.eventReg[m.Author.ID] = make(map[int]model.Event)
@@ -157,6 +167,11 @@ func (r *SplitProvider) split(m *discordgo.MessageCreate) (string, error) {
 		return "", ErrorInternalError
 	}
 
+	if len(attendees) == 0 {
+		r.Reset(m)
+		return "No one is coming to this event.  Try agian when more people have registered.", nil
+	}
+
 	var splitString string
 
 	splitter := eq.NewSplitter(attendees, false)
@@ -169,17 +184,22 @@ func (r *SplitProvider) split(m *discordgo.MessageCreate) (string, error) {
 			splitString += fmt.Sprintf("__Group %d__\n", g+1)
 			var items []string
 			for _, c := range group {
-				items = append(items, c.Name)
+				if c.CharacterType == model.TypeBox {
+					items = append(items, fmt.Sprintf("%s(box)", c.Name))
+				} else {
+					items = append(items, c.Name)
+				}
 			}
 			splitString += strings.Join(items, ", ") + "\n"
 		}
 	}
 
-	r.reset(m)
+	r.Reset(m)
 
 	return splitString, nil
 }
 
-func (r *SplitProvider) reset(m *discordgo.MessageCreate) {
+func (r *SplitProvider) Reset(m *discordgo.MessageCreate) {
 	delete(r.registry, m.Author.ID)
+	delete(r.eventReg, m.Author.ID)
 }

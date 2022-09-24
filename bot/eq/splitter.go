@@ -4,6 +4,7 @@ import (
 	"eqRaidBot/db/model"
 	"fmt"
 	"math"
+	"sort"
 )
 
 type Splitter struct {
@@ -13,8 +14,17 @@ type Splitter struct {
 }
 
 func NewSplitter(c []model.Character, debug bool) *Splitter {
+	// we only take mains and box's so filter out any alts here just in case they are passed to us
+	var characters []model.Character
+	for _, v := range c {
+		if v.CharacterType == model.TypeAlt {
+			continue
+		}
+		characters = append(characters, v)
+	}
+
 	return &Splitter{
-		characters: c,
+		characters: characters,
 		usedMap:    make(map[int64]bool),
 		debug:      debug,
 	}
@@ -29,8 +39,39 @@ func NewSplitter(c []model.Character, debug bool) *Splitter {
 // raid should have 1 main tank group - and DPS / healing groups
 // bards should be spread - enchanters paired with healers, and melee clustered together
 func (r *Splitter) Split(groupN int) ([][][]model.Character, []map[int64]int) {
+	charMap := make(map[string][]model.Character)
+	for _, k := range r.characters {
+		if _, ok := charMap[k.CreatedBy]; !ok {
+			charMap[k.CreatedBy] = []model.Character{k}
+		} else {
+			charMap[k.CreatedBy] = append(charMap[k.CreatedBy], k)
+		}
+	}
+
+	for k, v := range charMap {
+		if len(v) == 1 {
+			delete(charMap, k)
+		}
+	}
+
 	classGroups := raidWideClassGroups(r.characters)
-	splits := r.getSplits(groupN, classGroups)
+	splits := r.getSplits(groupN, classGroups, charMap)
+	//for _, s := range splits {
+	//	i := 0
+	//	for _, v := range s {
+	//		if v.CharacterType == model.TypeBox {
+	//			fmt.Println(v)
+	//		}
+	//	}
+	//	for c, v := range GenSpread(s) {
+	//		i += v
+	//		fmt.Printf("%s - %d\n", c, v)
+	//	}
+	//	fmt.Println("total", i)
+	//	fmt.Println("==================================")
+	//}
+	//
+	//os.Exit(0)
 
 	splitGroups := make([][][]model.Character, len(splits))
 
@@ -121,12 +162,14 @@ func (r *Splitter) buildGroup(gNum int, classGroups map[string][]model.Character
 func (r *Splitter) addMembersToGroup(classGroups map[string][]model.Character, indicator string, group *[]model.Character) {
 	var list []model.Character
 	if indicator == "any" {
-		list = append(list, classGroups[classTypeBard]...)
-		list = append(list, classGroups[classTypeMelee]...)
-		list = append(list, classGroups[classTypeCaster]...)
-		list = append(list, classGroups[classTypeHealer]...)
-		list = append(list, classGroups[classTypeEnchanter]...)
-		list = append(list, classGroups[classTypeTank]...)
+		list = r.buildChoiceList([]string{
+			classTypeBard,
+			classTypeMelee,
+			classTypeCaster,
+			classTypeHealer,
+			classTypeEnchanter,
+			classTypeTank,
+		}, classGroups)
 	} else {
 		list = classGroups[indicator]
 	}
@@ -157,12 +200,13 @@ func (r *Splitter) addMembersToGroup(classGroups map[string][]model.Character, i
 				}
 			}
 		} else {
-			var choices []model.Character
-			choices = append(choices, classGroups[classTypeHealer]...)
-			choices = append(choices, classGroups[classTypeMelee]...)
-			choices = append(choices, classGroups[classTypeCaster]...)
-			choices = append(choices, classGroups[classTypeEnchanter]...)
-			choices = append(choices, classGroups[classTypeTank]...)
+			choices := r.buildChoiceList([]string{
+				classTypeHealer,
+				classTypeMelee,
+				classTypeCaster,
+				classTypeEnchanter,
+				classTypeTank,
+			}, classGroups)
 
 			for _, k := range choices {
 				if _, ok := r.usedMap[k.Id]; !ok {
@@ -175,6 +219,14 @@ func (r *Splitter) addMembersToGroup(classGroups map[string][]model.Character, i
 	}
 }
 
+func (r *Splitter) buildChoiceList(types []string, classGroups map[string][]model.Character) []model.Character {
+	var choices []model.Character
+	for _, t := range types {
+		choices = append(choices, classGroups[t]...)
+	}
+	return choices
+}
+
 func (r *Splitter) bardsAvailable(classGroups map[string][]model.Character) bool {
 	for _, k := range classGroups[classTypeBard] {
 		if _, ok := r.usedMap[k.Id]; !ok {
@@ -185,13 +237,38 @@ func (r *Splitter) bardsAvailable(classGroups map[string][]model.Character) bool
 	return false
 }
 
-func (r *Splitter) getSplits(groupN int, classGroups map[int64][]model.Character) [][]model.Character {
+func (r *Splitter) getSplits(groupN int, classGroups map[int64][]model.Character, charMap map[string][]model.Character) [][]model.Character {
 	splits := make([][]model.Character, groupN)
 	var (
 		top       model.Character
 		classN    int64 = 1
 		currSplit       = 0
 	)
+
+	// handle any bots that exist
+	for _, chars := range charMap {
+		splits[currSplit] = append(splits[currSplit], chars...)
+		for _, c := range chars {
+			for i, v := range classGroups[c.Class] {
+				if c.Id == v.Id {
+					classGroups[c.Class] = append(classGroups[c.Class][:i], classGroups[c.Class][i+1:]...)
+					break
+				}
+			}
+		}
+
+		if currSplit == len(splits)-1 {
+			currSplit = 0
+		} else {
+			currSplit++
+		}
+	}
+
+	sort.Slice(splits, func(i int, j int) bool {
+		return len(splits[i]) < len(splits[j])
+	})
+
+	currSplit = 0
 
 	for {
 		if classN > 14 {
@@ -205,7 +282,12 @@ func (r *Splitter) getSplits(groupN int, classGroups map[int64][]model.Character
 
 		for len(classGroups[classN]) > 0 {
 			top, classGroups[classN] = classGroups[classN][0], classGroups[classN][1:]
-			splits[currSplit] = append(splits[currSplit], top)
+			// has a bot
+			if _, ok := charMap[top.CreatedBy]; ok {
+				splits[currSplit] = append(splits[currSplit], charMap[top.CreatedBy]...)
+			} else {
+				splits[currSplit] = append(splits[currSplit], top)
+			}
 
 			if currSplit == len(splits)-1 {
 				currSplit = 0

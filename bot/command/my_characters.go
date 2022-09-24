@@ -43,6 +43,9 @@ func (p *MyCharactersProvider) Cleanup() {
 	return
 }
 
+func (r *MyCharactersProvider) Reset(m *discordgo.MessageCreate) {
+}
+
 func (p *MyCharactersProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
 	genericSimpleHandler(s, m, p.manifest)
 }
@@ -62,7 +65,7 @@ func (p *MyCharactersProvider) list(m *discordgo.MessageCreate) (string, error) 
 	var charStrings []string
 
 	for i, k := range toons {
-		charStrings = append(charStrings, fmt.Sprintf("%d. %s - %d %s %s", i+1, k.Name, k.Level, eq.ClassChoiceMap[k.Class], charTypeMap[k.CharacterType]))
+		charStrings = append(charStrings, fmt.Sprintf("%d. %s - %d %s %s", i+1, k.Name, k.Level, eq.ClassChoiceMap[k.Class], model.CharTypeMap[k.CharacterType]))
 	}
 
 	if len(charStrings) == 0 {

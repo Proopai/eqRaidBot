@@ -3,6 +3,7 @@ package command
 import (
 	"github.com/bwmarrin/discordgo"
 	"log"
+	"time"
 )
 
 type commandAction int
@@ -12,15 +13,16 @@ const (
 	actionSent  = commandAction(2)
 	actionSkip  = commandAction(3)
 
-	Register      = "!register"
-	MyCharacters  = "!my-characters"
-	EditCharacter = "!edit-characters"
-	Withdraw      = "!withdraw"
-	Split         = "!split"
-	ListEvents    = "!event-list"
-	CreateEvent   = "!event-create"
-	Roster        = "!roster"
-	Help          = "!help"
+	Register     = "!register"
+	MyCharacters = "!my-characters"
+	Withdraw     = "!withdraw"
+	Split        = "!split"
+	ListEvents   = "!event-list"
+	CreateEvent  = "!event-create"
+	Roster       = "!roster"
+	Help         = "!help"
+
+	commandCacheWindow = 15 * time.Minute
 )
 
 type Provider interface {
@@ -29,6 +31,7 @@ type Provider interface {
 	Handle(s *discordgo.Session, m *discordgo.MessageCreate)
 	WorkflowForUser(userId string) State
 	Cleanup()
+	Reset(m *discordgo.MessageCreate)
 }
 
 type StateRegistry map[string]State
@@ -36,6 +39,7 @@ type StateRegistry map[string]State
 type State interface {
 	IsComplete() bool
 	Step() int64
+	TTL() time.Time
 }
 
 type Manifest struct {
@@ -43,6 +47,26 @@ type Manifest struct {
 }
 
 type Step func(m *discordgo.MessageCreate) (string, error)
+
+func cleanupCache(registry StateRegistry, fn func(k string)) {
+	t := time.NewTicker(commandCacheWindow)
+	for {
+		select {
+		case <-t.C:
+			cleaned := 0
+			for k, s := range registry {
+				if s.TTL().After(time.Now()) {
+					fn(k)
+					cleaned++
+				}
+			}
+
+			if cleaned > 0 {
+				log.Printf("cleaned %d items", cleaned)
+			}
+		}
+	}
+}
 
 func actionCommandManifest(manifest *Manifest, state int64, m *discordgo.MessageCreate) (string, error) {
 

@@ -40,15 +40,16 @@ func main() {
 	autoAttender := bot.NewAutoAttender(conn)
 
 	ch := make(chan struct{})
-	go autoAttender.Run(ch, 15*time.Second)
+	go autoAttender.Run(ch, 5*time.Second)
 
-	//t, spread := util.GenerateDBObjects(123)
-	//for k, v := range spread {
-	//	fmt.Println(k, v)
+	//t, _ := util.GenerateDBObjects(143)
+	//for _, v := range t {
+	//	v.Save(conn)
 	//}
-	//splitter := eq.NewSplitter(t, true)
-	//splitter.Split(3)
 	//os.Exit(1)
+	//splitter := eq.NewSplitter(t, true)
+	//splitter.Split(7)
+	//os.Exit(0)
 
 	dg.AddHandler(cmds.MessageCreatedHandler)
 

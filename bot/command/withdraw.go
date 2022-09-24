@@ -30,6 +30,7 @@ type withdrawState struct {
 	eventId int64
 	state   int64
 	userId  string
+	ttl     time.Time
 }
 
 func (r *withdrawState) IsComplete() bool {
@@ -38,6 +39,10 @@ func (r *withdrawState) IsComplete() bool {
 
 func (r *withdrawState) Step() int64 {
 	return r.state
+}
+
+func (r *withdrawState) TTL() time.Time {
+	return r.ttl
 }
 
 func NewWithdrawProvider(db *pgxpool.Pool) *WithdrawProvider {
@@ -68,7 +73,10 @@ func (p *WithdrawProvider) Description() string {
 
 // we have no state to clean up with this command
 func (p *WithdrawProvider) Cleanup() {
-	return
+	cleanupCache(p.registry, func(k string) {
+		delete(p.registry, k)
+		delete(p.attReg, k)
+	})
 }
 
 func (p *WithdrawProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -88,9 +96,11 @@ func (p *WithdrawProvider) start(m *discordgo.MessageCreate) (string, error) {
 		p.registry[m.Author.ID] = &withdrawState{
 			state:  withdrawStateConfirm,
 			userId: m.Author.ID,
+			ttl:    time.Now().Add(commandCacheWindow),
 		}
 
-		return "Please pick an option:\n1. Withdraw from the next event on all characters\n2. Withdraw from a specific event", nil
+		//return "Please pick an option:\n1. Withdraw from the next event on all characters\n2. Withdraw from a specific event", nil
+		return "Confirm your choice:\n1. Withdraw from the next event on all characters\n2. Cancel", nil
 	}
 
 	return "", nil
@@ -102,7 +112,10 @@ func (p *WithdrawProvider) eventOrNext(m *discordgo.MessageCreate) (string, erro
 		// next event
 		return p.next(m)
 	case "2":
-		return p.event(m)
+		p.Reset(m)
+		return "Canceled withdraw process.", nil
+	//case "3":
+	//	return p.event(m)
 	default:
 		return "", ErrorInvalidInput
 	}
@@ -118,7 +131,7 @@ func (p *WithdrawProvider) event(m *discordgo.MessageCreate) (string, error) {
 
 	if len(att) == 0 {
 		log.Println("no pending invitations")
-		p.reset(m)
+		p.Reset(m)
 		return "", errors.New("you have no pending invitations")
 	}
 
@@ -152,13 +165,15 @@ func (p *WithdrawProvider) next(m *discordgo.MessageCreate) (string, error) {
 	}
 
 	for i := range att {
-		att[i].Withdrawn = true
-		err := att[i].Update(p.db)
-		if err != nil {
-			return "", ErrorInternalError
+		if !att[i].Withdrawn {
+			att[i].Withdrawn = true
+			err := att[i].Update(p.db)
+			if err != nil {
+				return "", ErrorInternalError
+			}
 		}
 	}
-	p.reset(m)
+	p.Reset(m)
 
 	return fmt.Sprintf("%d attendees have been marked as absent from %s on %v", len(att), nextEvent.Title, nextEvent.EventTime), nil
 }
@@ -190,7 +205,7 @@ func (p *WithdrawProvider) individualString(att []model.Attendance, cMap map[int
 		msgs = append(msgs, fmt.Sprintf("%d. %s as %s @ %s %s",
 			idx,
 			char.Name,
-			charTypeMap[char.CharacterType],
+			model.CharTypeMap[char.CharacterType],
 			event.EventTime.Format(time.RFC822),
 			event.Title,
 		))
@@ -242,7 +257,7 @@ func (p *WithdrawProvider) metaData(att []model.Attendance) (map[int64]model.Eve
 	return eventMap, charMap, nil
 }
 
-func (p *WithdrawProvider) reset(m *discordgo.MessageCreate) {
+func (p *WithdrawProvider) Reset(m *discordgo.MessageCreate) {
 	delete(p.registry, m.Author.ID)
 	delete(p.attReg, m.Author.ID)
 }
