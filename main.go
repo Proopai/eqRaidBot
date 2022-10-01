@@ -42,8 +42,8 @@ func main() {
 
 	ac := make(chan struct{})
 	ec := make(chan struct{})
-	go autoAttender.Run(ac, 5*time.Second)
-	go eventWatcher.Run(ec, 5*time.Second)
+	go autoAttender.Run(ac, 5*time.Minute)
+	go eventWatcher.Run(ec, 5*time.Minute)
 
 	//t, _ := util.GenerateDBObjects(143)
 	//for _, v := range t {
