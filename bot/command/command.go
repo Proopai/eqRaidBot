@@ -25,6 +25,19 @@ const (
 	commandCacheWindow = 15 * time.Minute
 )
 
+var whitelist = map[string]bool{
+	"312417006009974785": true,
+	"335461061560107013": true,
+	"470047406034124801": true,
+	"238393951290130434": true,
+	"176157421151059969": true,
+	"423260284916858881": true,
+	"668504366726250507": true,
+	"302872026698350595": true,
+	"568945172457717760": true,
+	"328365547458789387": true,
+}
+
 type Provider interface {
 	Name() string
 	Description() string
@@ -48,6 +61,12 @@ type Manifest struct {
 
 type Step func(m *discordgo.MessageCreate) (string, error)
 
+func isAllowed(m *discordgo.MessageCreate) bool {
+	if _, ok := whitelist[m.Author.ID]; ok {
+		return true
+	}
+	return false
+}
 func cleanupCache(registry StateRegistry, fn func(k string)) {
 	t := time.NewTicker(commandCacheWindow)
 	for {
@@ -106,7 +125,7 @@ func genericStepwiseHandler(s *discordgo.Session, m *discordgo.MessageCreate, ma
 	}
 
 	if _, ok := registry[m.Author.ID]; !ok {
-		err = sendMessage(s, c.ID, "Please restart the split process by typing **!split**")
+		err = sendMessage(s, c.ID, "Please restart the command you are trying to run.")
 		if err != nil {
 			return
 		}

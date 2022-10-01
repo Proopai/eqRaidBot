@@ -5,6 +5,7 @@ import (
 	"eqRaidBot/db/model"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +89,13 @@ func (r *SplitProvider) WorkflowForUser(userId string) State {
 }
 
 func (r *SplitProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
+	if !isAllowed(m) {
+		err := sendMessage(s, m.ChannelID, "Only authorized users are allowed to generate splits.")
+		if err != nil {
+			log.Print(err.Error())
+		}
+		return
+	}
 	genericStepwiseHandler(s, m, r.manifest, r.registry)
 }
 

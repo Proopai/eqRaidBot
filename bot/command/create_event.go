@@ -101,6 +101,13 @@ func (r *CreateEventProvider) WorkflowForUser(userId string) State {
 }
 
 func (r *CreateEventProvider) Handle(s *discordgo.Session, m *discordgo.MessageCreate) {
+	if !isAllowed(m) {
+		err := sendMessage(s, m.ChannelID, "Only authorized users are allowed to create events.")
+		if err != nil {
+			log.Print(err.Error())
+		}
+		return
+	}
 	genericStepwiseHandler(s, m, r.manifest, r.registry)
 }
 
