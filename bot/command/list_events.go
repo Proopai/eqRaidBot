@@ -52,12 +52,14 @@ func (r *ListEventProvider) list(m *discordgo.MessageCreate) (string, error) {
 	var eventListText = `All scheduled events are listed below.
 %s
 `
+	fmt.Println("here")
 	e := model.Event{}
 	rows, err := e.GetAll(r.pool)
 	if err != nil {
 		return "", ErrorInternalError
 	}
 
+	fmt.Println("there")
 	var eventIds []int64
 	for _, event := range rows {
 		eventIds = append(eventIds, event.Id)
