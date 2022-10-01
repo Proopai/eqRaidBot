@@ -70,7 +70,7 @@ func (r *SplitProvider) Name() string {
 }
 
 func (r *SplitProvider) Description() string {
-	return "splits a raid force into N separate forces"
+	return "splits a raid force into N separate forces, not available to all users"
 }
 
 func (r *SplitProvider) Cleanup() {
