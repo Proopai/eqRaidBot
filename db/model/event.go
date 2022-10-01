@@ -59,8 +59,11 @@ func (r *Event) GetAll(db *pgxpool.Pool) ([]Event, error) {
 	defer conn.Release()
 
 	var events []Event
-	err = pgxscan.Select(context.Background(), db, &events, `SELECT * FROM events 
-	WHERE event_time > NOW() order by event_time;`)
+	q := `SELECT * FROM events 
+	WHERE event_time > NOW() order by event_time;`
+
+	fmt.Println(q)
+	err = pgxscan.Select(context.Background(), db, &events, q)
 	fmt.Println(events, err)
 	if err != nil {
 		return nil, err
