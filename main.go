@@ -38,9 +38,12 @@ func main() {
 	cmds := bot.NewCommandController(conn)
 
 	autoAttender := bot.NewAutoAttender(conn)
+	eventWatcher := bot.NewEventWatcher(conn)
 
-	ch := make(chan struct{})
-	go autoAttender.Run(ch, 5*time.Second)
+	ac := make(chan struct{})
+	ec := make(chan struct{})
+	go autoAttender.Run(ac, 5*time.Second)
+	go eventWatcher.Run(ec, 5*time.Second)
 
 	//t, _ := util.GenerateDBObjects(143)
 	//for _, v := range t {
@@ -65,8 +68,9 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
+	ac <- struct{}{}
+	ec <- struct{}{}
 	log.Println("Shutting down")
-	ch <- struct{}{}
 }
 
 func loadEnv() *config {
