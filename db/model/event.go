@@ -70,6 +70,26 @@ func (r *Event) GetAll(db *pgxpool.Pool) ([]Event, error) {
 	return events, nil
 }
 
+func (r *Event) GetAllNeedsRenewal(db *pgxpool.Pool) ([]Event, error) {
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	defer conn.Release()
+
+	var events []Event
+	q := `SELECT * FROM events 
+	WHERE is_repeatable = true order by event_time desc;`
+
+	err = pgxscan.Select(context.Background(), db, &events, q)
+	if err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
 func (r *Event) GetNext(db *pgxpool.Pool) (Event, error) {
 	conn, err := db.Acquire(context.Background())
 	if err != nil {
