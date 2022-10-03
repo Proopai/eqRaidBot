@@ -84,6 +84,23 @@ var ClassChoiceMap = map[int64]string{
 	classBard:         "Bard",
 }
 
+var ClassAbbreviationsMap = map[int64]string{
+	classWarrior:      "WAR",
+	classMonk:         "MNK",
+	classRogue:        "ROG",
+	classPaladin:      "PAL",
+	classShadowknight: "SHD",
+	classRanger:       "RNG",
+	classEnchanter:    "ENC",
+	classWizard:       "WIZ",
+	classMagician:     "MAG",
+	classNecromancer:  "NEC",
+	classShaman:       "SHM",
+	classDruid:        "DRU",
+	classCleric:       "CLR",
+	classBard:         "BRD",
+}
+
 var ClassChoiceString = func() string {
 	str := ""
 	var i int64

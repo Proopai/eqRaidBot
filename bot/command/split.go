@@ -193,9 +193,9 @@ func (r *SplitProvider) split(m *discordgo.MessageCreate) (string, error) {
 			var items []string
 			for _, c := range group {
 				if c.CharacterType == model.TypeBox {
-					items = append(items, fmt.Sprintf("%s(box)", c.Name))
+					items = append(items, fmt.Sprintf("%s-%s(box)", c.Name, eq.ClassAbbreviationsMap[c.Class]))
 				} else {
-					items = append(items, c.Name)
+					items = append(items, fmt.Sprintf("%s-%s", c.Name, eq.ClassAbbreviationsMap[c.Class]))
 				}
 			}
 			splitString += strings.Join(items, ", ") + "\n"
