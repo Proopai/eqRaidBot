@@ -167,7 +167,6 @@ func (r *Splitter) addMembersToGroup(classGroups map[string][]model.Character, i
 			classTypeMelee,
 			classTypeCaster,
 			classTypeHealer,
-			classTypeEnchanter,
 			classTypeTank,
 		}, classGroups)
 	} else {
@@ -204,7 +203,6 @@ func (r *Splitter) addMembersToGroup(classGroups map[string][]model.Character, i
 				classTypeHealer,
 				classTypeMelee,
 				classTypeCaster,
-				classTypeEnchanter,
 				classTypeTank,
 			}, classGroups)
 

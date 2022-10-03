@@ -25,12 +25,11 @@ const (
 	classCleric       = 13
 	classBard         = 14
 
-	classTypeTank      = "tank"
-	classTypeMelee     = "melee"
-	classTypeCaster    = "caster"
-	classTypeHealer    = "healer"
-	classTypeBard      = "bard"
-	classTypeEnchanter = "enchanter"
+	classTypeTank   = "tank"
+	classTypeMelee  = "melee"
+	classTypeCaster = "caster"
+	classTypeHealer = "healer"
+	classTypeBard   = "bard"
 )
 
 type classRangeMap map[int64]int
@@ -55,12 +54,9 @@ var Healers = classRangeMap{
 
 var CasterDps = classRangeMap{
 	classNecromancer: 1,
+	classEnchanter:   1,
 	classMagician:    2,
 	classWizard:      2,
-}
-
-var Enchanters = classRangeMap{
-	classEnchanter: 1,
 }
 
 var Bards = classRangeMap{
@@ -216,18 +212,11 @@ func selectionClassGroups(raidList []model.Character) map[string][]model.Charact
 			}
 		}
 
-		if _, ok := Enchanters[k.Class]; ok {
-			if _, ok := classes[classTypeEnchanter]; ok {
-				classes[classTypeEnchanter] = append(classes[classTypeEnchanter], k)
-			} else {
-				classes[classTypeEnchanter] = []model.Character{k}
-			}
-		}
 	}
 
 	for class, group := range classes {
 		// bards  and enchanters dont need sorting
-		if class == classTypeBard || class == classTypeEnchanter {
+		if class == classTypeBard {
 			continue
 		}
 
