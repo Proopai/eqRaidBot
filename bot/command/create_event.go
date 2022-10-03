@@ -149,6 +149,22 @@ func (r *CreateEventProvider) time(m *discordgo.MessageCreate) (string, error) {
 	if err != nil {
 		return "", ErrorInvalidInput
 	}
+
+	z, _ := t.Zone()
+
+	l, err := time.LoadLocation(z)
+	if err != nil {
+		return "", ErrorInternalError
+	}
+
+	t = t.In(l)
+	_, offset := t.Zone()
+	if offset < 0 {
+		offset = offset * -1
+	}
+	dur := time.Duration(offset) * time.Second
+	t = t.Add(dur)
+
 	v.(*eventState).time = t.UTC()
 	v.(*eventState).state = eventStateRepeating
 	r.registry[m.Author.ID] = v
