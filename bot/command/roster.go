@@ -166,7 +166,12 @@ func (r *RosterProvider) done(m *discordgo.MessageCreate) (string, error) {
 	sort.Strings(boxString)
 	sort.Strings(mString)
 
-	str := fmt.Sprintf("__Summary__:\n%s\n**Mains** - %d: \n **Boxes** - %d: %s", statString, mC, bC, strings.Join(boxString, ", "))
+	str := fmt.Sprintf("__Summary__:\n%s\n**Mains** - %d: %s \n **Boxes** - %d: %s",
+		statString,
+		mC,
+		strings.Join(mString, ", "),
+		bC,
+		strings.Join(boxString, ", "))
 
 	r.Reset(m)
 
