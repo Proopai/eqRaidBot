@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -147,14 +148,25 @@ func (r *RosterProvider) done(m *discordgo.MessageCreate) (string, error) {
 
 	statString := eq.PrintStats(eq.RaidWideClassCounts(toons))
 
-	var boxString []string
+	var (
+		mC, bC             int
+		boxString, mString []string
+	)
+
 	for _, t := range toons {
 		if t.CharacterType == model.TypeBox {
-			boxString = append(boxString, fmt.Sprintf("%s(%s)", t.Name, eq.ClassAbbreviationsMap[t.Class]))
+			boxString = append(boxString, fmt.Sprintf("(%s)%s", eq.ClassAbbreviationsMap[t.Class], t.Name))
+			bC++
+		} else {
+			mString = append(mString, fmt.Sprintf("(%s)%s", eq.ClassAbbreviationsMap[t.Class], t.Name))
+			mC++
 		}
 	}
 
-	str := fmt.Sprintf("Summary:\n%s\nBoxes: %s", statString, strings.Join(boxString, "\n"))
+	sort.Strings(boxString)
+	sort.Strings(mString)
+
+	str := fmt.Sprintf("__Summary__:\n%s\n**Mains** - %d: \n **Boxes** - %d: %s", statString, mC, bC, strings.Join(boxString, ", "))
 
 	r.Reset(m)
 
