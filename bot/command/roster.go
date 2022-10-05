@@ -146,7 +146,15 @@ func (r *RosterProvider) done(m *discordgo.MessageCreate) (string, error) {
 	}
 
 	statString := eq.PrintStats(eq.RaidWideClassCounts(toons))
-	str := fmt.Sprintf("Summary:\n%s", statString)
+
+	var boxString []string
+	for _, t := range toons {
+		if t.CharacterType == model.TypeBox {
+			boxString = append(boxString, fmt.Sprintf("%s(%s)", t.Name, eq.ClassAbbreviationsMap[t.Class]))
+		}
+	}
+
+	str := fmt.Sprintf("Summary:\n%s\nBoxes: %s", statString, strings.Join(boxString, "\n"))
 
 	r.Reset(m)
 
