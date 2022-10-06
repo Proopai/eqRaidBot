@@ -75,7 +75,7 @@ func (r *CommandController) MessageCreatedHandler(s *discordgo.Session, m *disco
 	}
 }
 
-var helpMessage = `Eq Raid Bot is a discord based EverQuest raid helper. Its primary goal is to track and generate raid splits.
+var helpMessage = `>>>Eq Raid Bot is a discord based EverQuest raid helper. Its primary goal is to track and generate raid splits.
 __Please refer to the list of commands below.__ 
 --------------------------------------------------------------
 %s

@@ -1,6 +1,7 @@
 package command
 
 import (
+	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"log"
 	"time"
@@ -176,7 +177,7 @@ func processCommand(manifest *Manifest, state int64, m *discordgo.MessageCreate,
 }
 
 func sendMessage(s *discordgo.Session, channelId string, msg string) error {
-	_, err := s.ChannelMessageSend(channelId, msg)
+	_, err := s.ChannelMessageSend(channelId, fmt.Sprintf(">>>%s", msg))
 	if err != nil {
 		log.Print(err.Error())
 		return err
